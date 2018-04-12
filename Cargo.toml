@@ -1,0 +1,16 @@
+[package]
+name = "lila-tablebase"
+version = "0.1.0" # remember to update html_root_url
+description = "A Syzygy tablebase server"
+homepage = "https://tablebase.lichess.org"
+repository = "https://github.com/niklasf/lila-tablebase"
+readme = "README.md"
+license = "GPL-3.0+"
+authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
+categories = ["games"]
+keywords = ["chess", "syzygy", "tablebase"]
+
+[dependencies]
+shakmaty = "0.6"
+shakmaty-syzygy = "0.1"
+actix-web = "0.5"
