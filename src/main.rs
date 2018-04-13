@@ -127,22 +127,22 @@ impl MoveInfo {
         } else if self.probe.insufficient_material {
             MoveOrder::InsufficientMaterial
         } else if let (Some(wdl), Some(dtz)) = (self.probe.wdl, self.probe.dtz) {
-            if wdl == 1 {
+            if wdl == Wdl::CursedWin {
                 MoveOrder::CursedWin { dtz }
-            } else if wdl == -1 {
+            } else if wdl == Wdl::BlessedLoss {
                 MoveOrder::BlessedLoss { dtz }
             } else if self.zeroing {
-                if wdl >= 2 {
+                if wdl == Wdl::Win  {
                     MoveOrder::WinningZeroing { dtz }
-                } else if wdl <= -2 {
+                } else if wdl == Wdl::Loss {
                     MoveOrder::LosingZeroing { dtz }
                 } else {
                     MoveOrder::ZeroingDraw
                 }
             } else {
-                if wdl >= 2 {
+                if wdl == Wdl::Win {
                     MoveOrder::Winning { dtz }
-                } else if wdl <= -2 {
+                } else if wdl == Wdl::Loss {
                     MoveOrder::Losing { dtz }
                 } else {
                     MoveOrder::Draw
@@ -159,27 +159,27 @@ enum MoveOrder {
     Checkmate,
     VariantLoss,
     WinningZeroing {
-        dtz: i16,
+        dtz: Dtz,
     },
     Winning {
-        dtz: i16,
+        dtz: Dtz,
     },
     Unknown,
     CursedWin {
-        dtz: i16,
+        dtz: Dtz,
     },
     Stalemate,
     InsufficientMaterial,
     ZeroingDraw,
     Draw,
     BlessedLoss {
-        dtz: i16,
+        dtz: Dtz,
     },
     Losing {
-        dtz: i16,
+        dtz: Dtz,
     },
     LosingZeroing {
-        dtz: i16,
+        dtz: Dtz,
     },
     VariantWin,
 }
@@ -191,8 +191,8 @@ struct ProbeResult {
     variant_win: bool,
     variant_loss: bool,
     insufficient_material: bool,
-    wdl: Option<i8>,
-    dtz: Option<i16>,
+    wdl: Option<Wdl>,
+    dtz: Option<Dtz>,
 }
 
 #[derive(Clone)]
@@ -241,7 +241,7 @@ impl Tablebase {
         let wdl = pos.outcome()
             .map(|o| Wdl::from_outcome(&o, pos.turn()))
             .or_else(|| {
-                dtz.map(|dtz| Wdl::from(dtz.add_plies(halfmove_clock)))
+                dtz.map(|dtz| Wdl::from(Dtz(dtz.0.signum() * (dtz.0.abs() + halfmove_clock))))
             });
 
         Ok(ProbeResult {
@@ -250,8 +250,8 @@ impl Tablebase {
             variant_win,
             variant_loss,
             insufficient_material: pos.is_insufficient_material(),
-            dtz: dtz.map(i16::from),
-            wdl: wdl.map(i8::from),
+            dtz,
+            wdl,
         })
     }
 }
