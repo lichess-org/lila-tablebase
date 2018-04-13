@@ -16,9 +16,10 @@ use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
 use shakmaty::{Color, Move, Chess, Setup, Position, MoveList, Outcome};
+use shakmaty::fen::Fen;
 use shakmaty::uci::{uci, Uci};
 use shakmaty::san::{san, San};
-use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError, Syzygy};
+use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError};
 use futures::future::{Future, ok};
 
 struct State {
@@ -27,73 +28,73 @@ struct State {
 
 #[derive(Clone)]
 enum VariantPosition {
-    Regular(Chess),
+    Standard(Chess),
 }
 
 impl VariantPosition {
     fn is_checkmate(&self) -> bool {
         match self {
-            VariantPosition::Regular(pos) => pos.is_checkmate(),
+            VariantPosition::Standard(pos) => pos.is_checkmate(),
         }
     }
 
     fn is_stalemate(&self) -> bool {
         match self {
-            VariantPosition::Regular(pos) => pos.is_stalemate(),
+            VariantPosition::Standard(pos) => pos.is_stalemate(),
         }
     }
 
     fn turn(&self) -> Color {
         match self {
-            VariantPosition::Regular(pos) => pos.turn(),
+            VariantPosition::Standard(pos) => pos.turn(),
         }
     }
 
     fn is_insufficient_material(&self) -> bool {
         match self {
-            VariantPosition::Regular(pos) => pos.is_insufficient_material(),
+            VariantPosition::Standard(pos) => pos.is_insufficient_material(),
         }
     }
 
     fn outcome(&self) -> Option<Outcome> {
         match self {
-            VariantPosition::Regular(pos) => pos.outcome(),
+            VariantPosition::Standard(pos) => pos.outcome(),
         }
     }
 
     fn variant_outcome(&self) -> Option<Outcome> {
         match self {
-            VariantPosition::Regular(pos) => pos.variant_outcome(),
+            VariantPosition::Standard(pos) => pos.variant_outcome(),
         }
     }
 
     fn halfmove_clock(&self) -> u32 {
         match self {
-            VariantPosition::Regular(pos) => pos.halfmove_clock(),
+            VariantPosition::Standard(pos) => pos.halfmove_clock(),
         }
     }
 
     fn legal_moves(&self, moves: &mut MoveList) {
         match self {
-            VariantPosition::Regular(pos) => pos.legal_moves(moves),
+            VariantPosition::Standard(pos) => pos.legal_moves(moves),
         }
     }
 
     fn play_unchecked(&mut self, m: &Move) {
         match self {
-            VariantPosition::Regular(pos) => pos.play_unchecked(m),
+            VariantPosition::Standard(pos) => pos.play_unchecked(m),
         }
     }
 
     fn uci(&self, m: &Move) -> Uci {
         match self {
-            VariantPosition::Regular(pos) => uci(pos, m)
+            VariantPosition::Standard(pos) => uci(pos, m)
         }
     }
 
     fn san(&self, m: &Move) -> San {
         match self {
-            VariantPosition::Regular(pos) => san(pos, m)
+            VariantPosition::Standard(pos) => san(pos, m)
         }
     }
 }
@@ -205,13 +206,13 @@ impl TablebaseStub {
         TablebaseStub { addr }
     }
 
-    fn query(&self, pos: Chess) -> impl Future<Item=Result<TablebaseResponse, SyzygyError>, Error=MailboxError> {
-        self.addr.send(VariantPosition::Regular(pos))
+    fn query(&self, pos: VariantPosition) -> impl Future<Item=Result<TablebaseResponse, SyzygyError>, Error=MailboxError> {
+        self.addr.send(pos)
     }
 }
 
 struct Tablebase {
-    regular: Arc<Tablebases<Chess>>,
+    standard: Arc<Tablebases<Chess>>,
 }
 
 impl Tablebase {
@@ -226,7 +227,7 @@ impl Tablebase {
         let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
 
         let dtz = match pos {
-            VariantPosition::Regular(pos) => self.regular.probe_dtz(pos),
+            VariantPosition::Standard(pos) => self.standard.probe_dtz(pos),
         };
 
         let dtz = match dtz {
@@ -272,6 +273,7 @@ impl Handler<VariantPosition> for Tablebase {
         for m in moves {
             let mut after = pos.clone();
             after.play_unchecked(&m);
+
             move_info.push(MoveInfo {
                 uci: pos.uci(&m).to_string(),
                 san: pos.san(&m).to_string(),
@@ -293,12 +295,35 @@ impl Message for VariantPosition {
     type Result = Result<TablebaseResponse, SyzygyError>;
 }
 
-fn get_fen(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>> {
-    /* let fen = req.query().get("fen").unwrap_or(""); */
-    req.state().tablebase.query(Chess::default())
+fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>> {
+    let fen = if let Some(fen) = req.query().get("fen") {
+        fen
+    } else {
+        return Box::new(ok(HttpResponse::BadRequest().body("fen missing")));
+    };
+
+    let fen = if let Ok(fen) = fen.parse::<Fen>() {
+        fen
+    } else {
+        return Box::new(ok(HttpResponse::BadRequest().body("fen invalid")));
+    };
+
+    let pos = match "standard" {
+        "standard" => fen.position().map(VariantPosition::Standard),
+        _ => return Box::new(ok(HttpResponse::NotFound().body("unknown variant"))),
+    };
+
+    let pos = if let Ok(pos) = pos {
+        pos
+    } else {
+        return Box::new(ok(HttpResponse::BadRequest().body("fen illegal")));
+    };
+
+    req.state().tablebase.query(pos)
         .from_err()
-        .map(|res| {
-            HttpResponse::Ok().json(res.ok())
+        .map(|res| match res {
+            Ok(res) => HttpResponse::Ok().json(res),
+            Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
         })
         .responder()
 }
@@ -312,11 +337,13 @@ fn main() {
     tables.add_directory("/opt/syzygy/regular/syzygy").expect("open dir");
     let tables = Arc::new(tables);
 
-    let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase { regular: tables.clone() } ));
+    let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase {
+        standard: tables.clone()
+    }));
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
-            .resource("/", |r| r.get().f(get_fen))
+            .resource("/api/v1/standard", |r| r.get().f(api_v1))
     });
 
     server.bind("127.0.0.1:8080").unwrap().start();
