@@ -40,8 +40,8 @@ name | type | default | description
 
 ```javascript
 {
-    "wdl": 0, // 2 win, 1 cursed win, 0 draw, -1 blessed loss, -2 loss
-    "dtz": 0, // distance to zeroing
+    "wdl": 0, // 2 win, 1 cursed win, 0 draw, -1 blessed loss, -2 loss, null unknown
+    "dtz": 0, // distance to zeroing or null if unknown
     "checkmate": false,
     "stalemate": false,
     "variant_win": false, // only useful in chess variants (atomic, antichess)
