@@ -101,7 +101,7 @@ impl VariantPosition {
 #[derive(Serialize)]
 struct TablebaseResponse {
     #[serde(flatten)]
-    probe: PositionInfo,
+    pos: PositionInfo,
     moves: ArrayVec<[MoveInfo; 256]>,
 }
 
@@ -111,22 +111,22 @@ struct MoveInfo {
     san: String,
     zeroing: bool,
     #[serde(flatten)]
-    probe: PositionInfo,
+    pos: PositionInfo,
 }
 
 impl MoveInfo {
     fn order(&self) -> MoveOrder {
-        if self.probe.checkmate {
+        if self.pos.checkmate {
             MoveOrder::Checkmate
-        } else if self.probe.variant_loss {
+        } else if self.pos.variant_loss {
             MoveOrder::VariantLoss
-        } else if self.probe.variant_win {
+        } else if self.pos.variant_win {
             MoveOrder::VariantWin
-        } else if self.probe.stalemate {
+        } else if self.pos.stalemate {
             MoveOrder::Stalemate
-        } else if self.probe.insufficient_material {
+        } else if self.pos.insufficient_material {
             MoveOrder::InsufficientMaterial
-        } else if let (Some(wdl), Some(dtz)) = (self.probe.wdl, self.probe.dtz) {
+        } else if let (Some(wdl), Some(dtz)) = (self.pos.wdl, self.pos.dtz) {
             if wdl == Wdl::CursedWin {
                 MoveOrder::CursedWin { dtz }
             } else if wdl == Wdl::BlessedLoss {
@@ -215,7 +215,7 @@ struct Tablebase {
 }
 
 impl Tablebase {
-    fn probe(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
+    fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
             Some(Outcome::Decisive { winner }) =>
                 (winner == pos.turn(), winner != pos.turn()),
@@ -275,7 +275,7 @@ impl Handler<VariantPosition> for Tablebase {
             move_info.push(MoveInfo {
                 uci: pos.uci(&m).to_string(),
                 san: pos.san(&m).to_string(),
-                probe: self.probe(&after)?,
+                pos: self.position_info(&after)?,
                 zeroing: m.is_zeroing(),
             });
         }
@@ -283,7 +283,7 @@ impl Handler<VariantPosition> for Tablebase {
         move_info.sort_by_key(|m: &MoveInfo| m.order());
 
         Ok(TablebaseResponse {
-            probe: self.probe(&pos)?,
+            pos: self.position_info(&pos)?,
             moves: move_info,
         })
     }
