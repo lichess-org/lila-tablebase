@@ -308,9 +308,9 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>
         return Box::new(ok(HttpResponse::BadRequest().body("fen invalid")));
     };
 
-    let pos = match "standard" {
-        "standard" => fen.position().map(VariantPosition::Standard),
-        _ => return Box::new(ok(HttpResponse::NotFound().body("unknown variant"))),
+    let pos = match req.match_info().get("variant") {
+        Some("standard") => fen.position().map(VariantPosition::Standard),
+        _ => return Box::new(ok(HttpResponse::NotFound().body("variant not found"))),
     };
 
     let pos = if let Ok(pos) = pos {
@@ -343,7 +343,7 @@ fn main() {
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
-            .resource("/api/v1/standard", |r| r.get().f(api_v1))
+            .resource("/api/v1/{variant}", |r| r.get().f(api_v1))
     });
 
     server.bind("127.0.0.1:8080").unwrap().start();
