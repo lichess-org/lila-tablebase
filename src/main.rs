@@ -10,7 +10,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use std::cmp::{min, Ord, PartialOrd, Ordering};
+use std::cmp::min;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
@@ -99,9 +99,9 @@ impl VariantPosition {
 }
 
 #[derive(Serialize)]
-struct TablebaseResult {
+struct TablebaseResponse {
     #[serde(flatten)]
-    probe: ProbeResult,
+    probe: PositionInfo,
     moves: ArrayVec<[MoveInfo; 256]>,
 }
 
@@ -185,7 +185,7 @@ enum MoveOrder {
 }
 
 #[derive(Serialize)]
-struct ProbeResult {
+struct PositionInfo {
     checkmate: bool,
     stalemate: bool,
     variant_win: bool,
@@ -205,7 +205,7 @@ impl TablebaseStub {
         TablebaseStub { addr }
     }
 
-    fn query(&self, pos: Chess) -> impl Future<Item=Result<TablebaseResult, SyzygyError>, Error=MailboxError> {
+    fn query(&self, pos: Chess) -> impl Future<Item=Result<TablebaseResponse, SyzygyError>, Error=MailboxError> {
         self.addr.send(VariantPosition::Regular(pos))
     }
 }
@@ -215,7 +215,7 @@ struct Tablebase {
 }
 
 impl Tablebase {
-    fn probe(&self, pos: &VariantPosition) -> Result<ProbeResult, SyzygyError> {
+    fn probe(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
             Some(Outcome::Decisive { winner }) =>
                 (winner == pos.turn(), winner != pos.turn()),
@@ -223,7 +223,7 @@ impl Tablebase {
                 (false, false),
         };
 
-        let halfmove_clock = min(100, pos.halfmove_clock()) as i16;
+        let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
 
         let dtz = match pos {
             VariantPosition::Regular(pos) => self.regular.probe_dtz(pos),
@@ -261,7 +261,7 @@ impl Actor for Tablebase {
 }
 
 impl Handler<VariantPosition> for Tablebase {
-    type Result = Result<TablebaseResult, SyzygyError>;
+    type Result = Result<TablebaseResponse, SyzygyError>;
 
     fn handle(&mut self, pos: VariantPosition, _: &mut Self::Context) -> Self::Result {
         let mut moves = MoveList::new();
@@ -282,7 +282,7 @@ impl Handler<VariantPosition> for Tablebase {
 
         move_info.sort_by_key(|m: &MoveInfo| m.order());
 
-        Ok(TablebaseResult {
+        Ok(TablebaseResponse {
             probe: self.probe(&pos)?,
             moves: move_info,
         })
@@ -290,7 +290,7 @@ impl Handler<VariantPosition> for Tablebase {
 }
 
 impl Message for VariantPosition {
-    type Result = Result<TablebaseResult, SyzygyError>;
+    type Result = Result<TablebaseResponse, SyzygyError>;
 }
 
 fn get_fen(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>> {
