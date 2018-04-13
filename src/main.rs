@@ -100,6 +100,7 @@ impl VariantPosition {
 
 #[derive(Serialize)]
 struct TablebaseResult {
+    #[serde(flatten)]
     probe: ProbeResult,
     moves: ArrayVec<[MoveInfo; 512]>,
 }
@@ -109,6 +110,7 @@ struct MoveInfo {
     uci: String,
     san: String,
     zeroing: bool,
+    #[serde(flatten)]
     probe: ProbeResult,
 }
 
@@ -235,6 +237,7 @@ fn main() {
     let system = actix::System::new("lila-tablebase");
 
     let mut tables = Tablebases::<Chess>::new();
+    tables.add_directory("/opt/syzygy/regular/syzygy").expect("open dir");
     let tables = Arc::new(tables);
 
     let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase { regular: tables.clone() } ));
