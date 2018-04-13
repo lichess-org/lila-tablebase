@@ -60,6 +60,12 @@ name | type | default | description
 
 ### `GET /v1/antichess`
 
+Acknowledgements
+----------------
+
+Thanks to Ronald de Man for his [Syzygy endgame tables](https://github.com/syzygy1/tb).
+Thanks to Bojun Guo for generating and [sharing](http://www.talkchess.com/forum/viewtopic.php?t=66797) experimental 7-man tables.
+
 License
 -------
 
