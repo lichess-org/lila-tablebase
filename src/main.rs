@@ -10,7 +10,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use std::cmp::min;
+use std::cmp::{min, Ord, PartialOrd, Ordering};
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
@@ -114,6 +114,76 @@ struct MoveInfo {
     probe: ProbeResult,
 }
 
+impl MoveInfo {
+    fn order(&self) -> MoveOrder {
+        if self.probe.checkmate {
+            MoveOrder::Checkmate
+        } else if self.probe.variant_loss {
+            MoveOrder::VariantLoss
+        } else if self.probe.variant_win {
+            MoveOrder::VariantWin
+        } else if self.probe.stalemate {
+            MoveOrder::Stalemate
+        } else if self.probe.insufficient_material {
+            MoveOrder::InsufficientMaterial
+        } else if let (Some(wdl), Some(dtz)) = (self.probe.wdl, self.probe.dtz) {
+            if wdl == 1 {
+                MoveOrder::CursedWin { dtz }
+            } else if wdl == -1 {
+                MoveOrder::BlessedLoss { dtz }
+            } else if self.zeroing {
+                if wdl >= 2 {
+                    MoveOrder::WinningZeroing { dtz }
+                } else if wdl <= -2 {
+                    MoveOrder::LosingZeroing { dtz }
+                } else {
+                    MoveOrder::ZeroingDraw
+                }
+            } else {
+                if wdl >= 2 {
+                    MoveOrder::Winning { dtz }
+                } else if wdl <= -2 {
+                    MoveOrder::Losing { dtz }
+                } else {
+                    MoveOrder::Draw
+                }
+            }
+        } else {
+            MoveOrder::Unknown
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd)]
+enum MoveOrder {
+    Checkmate,
+    VariantLoss,
+    CursedWin {
+        dtz: i16,
+    },
+    WinningZeroing {
+        dtz: i16,
+    },
+    Winning {
+        dtz: i16,
+    },
+    Stalemate,
+    InsufficientMaterial,
+    ZeroingDraw,
+    Draw,
+    Unknown,
+    BlessedLoss {
+        dtz: i16,
+    },
+    Losing {
+        dtz: i16,
+    },
+    LosingZeroing {
+        dtz: i16,
+    },
+    VariantWin,
+}
+
 #[derive(Serialize)]
 struct ProbeResult {
     checkmate: bool,
@@ -210,6 +280,8 @@ impl Handler<VariantPosition> for Tablebase {
             });
         }
 
+        move_info.sort_by_key(|m: &MoveInfo| m.order());
+
         Ok(TablebaseResult {
             probe: self.probe(&pos)?,
             moves: move_info,
@@ -225,8 +297,8 @@ fn get_fen(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error
     /* let fen = req.query().get("fen").unwrap_or(""); */
     req.state().tablebase.query(Chess::default())
         .from_err()
-        .and_then(|res| {
-            ok(HttpResponse::Ok().json(res.ok()))
+        .map(|res| {
+            HttpResponse::Ok().json(res.ok())
         })
         .responder()
 }
