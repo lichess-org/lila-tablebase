@@ -19,7 +19,7 @@ use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, R
 use shakmaty::{Color, Move, Chess, Setup, Position, MoveList, Outcome};
 use shakmaty::fen::Fen;
 use shakmaty::uci::{uci, Uci};
-use shakmaty::san::{san, San};
+use shakmaty::san::{san_plus, SanPlus};
 use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError};
 use futures::future::{Future, ok};
 
@@ -93,9 +93,9 @@ impl VariantPosition {
         }
     }
 
-    fn san(&self, m: &Move) -> San {
+    fn san_plus(self, m: &Move) -> SanPlus {
         match self {
-            VariantPosition::Standard(pos) => san(pos, m)
+            VariantPosition::Standard(pos) => san_plus(pos, m)
         }
     }
 }
@@ -277,7 +277,7 @@ impl Handler<VariantPosition> for Tablebase {
 
             move_info.push(MoveInfo {
                 uci: pos.uci(&m).to_string(),
-                san: pos.san(&m).to_string(),
+                san: pos.clone().san_plus(&m).to_string(),
                 pos: self.position_info(&after)?,
                 zeroing: m.is_zeroing(),
             });
