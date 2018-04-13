@@ -1,14 +1,23 @@
+extern crate arrayvec;
 extern crate actix;
 extern crate actix_web;
 extern crate env_logger;
 extern crate shakmaty;
 extern crate shakmaty_syzygy;
 extern crate futures;
+extern crate serde;
+extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
+use std::cmp::min;
 use std::sync::Arc;
+use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
-use shakmaty::{Color, Chess, Setup, Position, MoveList, Outcome};
+use shakmaty::{Color, Move, Chess, Setup, Position, MoveList, Outcome};
+use shakmaty::uci::{uci, Uci};
+use shakmaty::san::{san, San};
 use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError, Syzygy};
 use futures::future::{Future, ok};
 
@@ -16,6 +25,7 @@ struct State {
     tablebase: TablebaseStub,
 }
 
+#[derive(Clone)]
 enum VariantPosition {
     Regular(Chess),
 }
@@ -45,6 +55,12 @@ impl VariantPosition {
         }
     }
 
+    fn outcome(&self) -> Option<Outcome> {
+        match self {
+            VariantPosition::Regular(pos) => pos.outcome(),
+        }
+    }
+
     fn variant_outcome(&self) -> Option<Outcome> {
         match self {
             VariantPosition::Regular(pos) => pos.variant_outcome(),
@@ -56,16 +72,55 @@ impl VariantPosition {
             VariantPosition::Regular(pos) => pos.halfmove_clock(),
         }
     }
+
+    fn legal_moves(&self, moves: &mut MoveList) {
+        match self {
+            VariantPosition::Regular(pos) => pos.legal_moves(moves),
+        }
+    }
+
+    fn play_unchecked(&mut self, m: &Move) {
+        match self {
+            VariantPosition::Regular(pos) => pos.play_unchecked(m),
+        }
+    }
+
+    fn uci(&self, m: &Move) -> Uci {
+        match self {
+            VariantPosition::Regular(pos) => uci(pos, m)
+        }
+    }
+
+    fn san(&self, m: &Move) -> San {
+        match self {
+            VariantPosition::Regular(pos) => san(pos, m)
+        }
+    }
 }
 
+#[derive(Serialize)]
+struct TablebaseResult {
+    probe: ProbeResult,
+    moves: ArrayVec<[MoveInfo; 512]>,
+}
+
+#[derive(Serialize)]
+struct MoveInfo {
+    uci: String,
+    san: String,
+    zeroing: bool,
+    probe: ProbeResult,
+}
+
+#[derive(Serialize)]
 struct ProbeResult {
     checkmate: bool,
     stalemate: bool,
     variant_win: bool,
     variant_loss: bool,
     insufficient_material: bool,
-    wdl: Option<Wdl>,
-    dtz: Option<Dtz>,
+    wdl: Option<i8>,
+    dtz: Option<i16>,
 }
 
 #[derive(Clone)]
@@ -78,7 +133,7 @@ impl TablebaseStub {
         TablebaseStub { addr }
     }
 
-    fn query(&self, pos: Chess) -> impl Future<Item=Result<ProbeResult, SyzygyError>, Error=MailboxError> {
+    fn query(&self, pos: Chess) -> impl Future<Item=Result<TablebaseResult, SyzygyError>, Error=MailboxError> {
         self.addr.send(VariantPosition::Regular(pos))
     }
 }
@@ -96,13 +151,26 @@ impl Tablebase {
                 (false, false),
         };
 
+        let halfmove_clock = min(100, pos.halfmove_clock()) as i16;
+
         let dtz = match pos {
-            VariantPosition::Regular(pos) => self.regular.probe_dtz(pos).ok(),
+            VariantPosition::Regular(pos) => self.regular.probe_dtz(pos),
         };
 
-        let wdl = dtz.map(Wdl::from).or_else(|| match pos {
-            VariantPosition::Regular(pos) => self.regular.probe_wdl(pos).ok(),
-        });
+        let dtz = match dtz {
+            Err(SyzygyError::Castling) |
+            Err(SyzygyError::TooManyPieces) |
+            Err(SyzygyError::MissingTable { .. }) =>
+                None, // acceptable errors
+            _ =>
+                Some(dtz?),
+        };
+
+        let wdl = pos.outcome()
+            .map(|o| Wdl::from_outcome(&o, pos.turn()))
+            .or_else(|| {
+                dtz.map(|dtz| Wdl::from(dtz.add_plies(halfmove_clock)))
+            });
 
         Ok(ProbeResult {
             checkmate: pos.is_checkmate(),
@@ -110,8 +178,8 @@ impl Tablebase {
             variant_win,
             variant_loss,
             insufficient_material: pos.is_insufficient_material(),
-            dtz: dtz,
-            wdl: wdl,
+            dtz: dtz.map(i16::from),
+            wdl: wdl.map(i8::from),
         })
     }
 }
@@ -121,15 +189,34 @@ impl Actor for Tablebase {
 }
 
 impl Handler<VariantPosition> for Tablebase {
-    type Result = Result<ProbeResult, SyzygyError>;
+    type Result = Result<TablebaseResult, SyzygyError>;
 
-    fn handle(&mut self, msg: VariantPosition, _: &mut Self::Context) -> Self::Result {
-        self.probe(&msg)
+    fn handle(&mut self, pos: VariantPosition, _: &mut Self::Context) -> Self::Result {
+        let mut moves = MoveList::new();
+        pos.legal_moves(&mut moves);
+
+        let mut move_info = ArrayVec::new();
+
+        for m in moves {
+            let mut after = pos.clone();
+            after.play_unchecked(&m);
+            move_info.push(MoveInfo {
+                uci: pos.uci(&m).to_string(),
+                san: pos.san(&m).to_string(),
+                probe: self.probe(&after)?,
+                zeroing: m.is_zeroing(),
+            });
+        }
+
+        Ok(TablebaseResult {
+            probe: self.probe(&pos)?,
+            moves: move_info,
+        })
     }
 }
 
 impl Message for VariantPosition {
-    type Result = Result<ProbeResult, SyzygyError>;
+    type Result = Result<TablebaseResult, SyzygyError>;
 }
 
 fn get_fen(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>> {
@@ -137,7 +224,7 @@ fn get_fen(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error
     req.state().tablebase.query(Chess::default())
         .from_err()
         .and_then(|res| {
-            ok(HttpResponse::Ok().body("foo".to_string()))
+            ok(HttpResponse::Ok().json(res.ok()))
         })
         .responder()
 }

@@ -92,6 +92,7 @@ version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "nodrop 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.37 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -678,10 +679,14 @@ version = "0.1.0"
 dependencies = [
  "actix 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.37 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.37 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "shakmaty 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "shakmaty-syzygy 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "shakmaty-syzygy 0.1.0",
 ]
 
 [[package]]
@@ -1160,7 +1165,6 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "bit-vec 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1780,7 +1784,6 @@ dependencies = [
 "checksum serde_urlencoded 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "ce0fd303af908732989354c6f02e05e2e6d597152870f2c6990efb0577137480"
 "checksum sha1 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
 "checksum shakmaty 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)" = "a6fff8e398cb349d649f210f42662ebb7dd28a4d6a2e758669639943a68720c1"
-"checksum shakmaty-syzygy 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "cf0f16fee865d9b07a1b5884a418fcdce5d3e4b70954e26023c9bcecf2dd984f"
 "checksum siphasher 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "0df90a788073e8d0235a67e50441d47db7c8ad9debd91cbf43736a2a92d36537"
 "checksum skeptic 0.13.2 (registry+https://github.com/rust-lang/crates.io-index)" = "c8431f8fca168e2db4be547bd8329eac70d095dff1444fee4b0fa0fabc7df75a"
 "checksum slab 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fdeff4cd9ecff59ec7e3744cbca73dfe5ac35c2aedb2cfba8a1c715a18912e9d"
