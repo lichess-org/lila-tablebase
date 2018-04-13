@@ -1,6 +1,7 @@
 extern crate arrayvec;
 extern crate actix;
 extern crate actix_web;
+extern crate clap;
 extern crate env_logger;
 extern crate shakmaty;
 extern crate shakmaty_syzygy;
@@ -329,16 +330,36 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>
 }
 
 fn main() {
+    let args = clap::App::new("lila-tablebase")
+        .version("0.1.0")
+        .about("Tablebase server for lichess.org")
+        .author("Niklas Fiekas")
+        .arg(clap::Arg::with_name("standard")
+            .long("standard")
+            .takes_value(true)
+            .help("Directory with .rtbw and .rtbz files")
+            .multiple(true))
+        .arg(clap::Arg::with_name("bind")
+            .long("bind")
+            .default_value("127.0.0.1:8080"))
+        .get_matches();
+
     ::std::env::set_var("RUST_LOG", "actix_web=info");
     let _ = env_logger::init();
     let system = actix::System::new("lila-tablebase");
 
-    let mut tables = Tablebases::<Chess>::new();
-    tables.add_directory("/opt/syzygy/regular/syzygy").expect("open dir");
-    let tables = Arc::new(tables);
+    let mut standard = Tablebases::<Chess>::new();
+
+    if let Some(paths) = args.values_of_os("standard") {
+        for path in paths {
+            standard.add_directory(path).expect("open standard directory");
+        }
+    }
+
+    let standard = Arc::new(standard);
 
     let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase {
-        standard: tables.clone()
+        standard: standard.clone(),
     }));
 
     let server = server::new(move || {
@@ -346,6 +367,6 @@ fn main() {
             .resource("/api/v1/{variant}", |r| r.get().f(api_v1))
     });
 
-    server.bind("127.0.0.1:8080").unwrap().start();
+    server.bind(args.value_of("bind").unwrap()).unwrap().start();
     system.run();
 }
