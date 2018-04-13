@@ -31,7 +31,7 @@ HTTP API
 ### `GET /v1/standard`
 
 ```
-curl https://tablebase.lichess.org/v1/standard?fen=8/6B1/8/8/B7/8/K1pk4/8%20b%20-%20-%200%201
+curl https://tablebase.lichess.org/v1/standard?fen=7K/8/k1P5/7p/8/8/8/8%20w%20-%20-%200%201
 ```
 
 name | type | default | description
@@ -40,135 +40,19 @@ name | type | default | description
 
 ```javascript
 {
-   "checkmate":false,
-   "stalemate":false,
-   "variant_win":false,
-   "variant_loss":false,
-   "insufficient_material":false,
-   "wdl":null,
-   "dtz":null,
-   "moves":[
-      {
-         "uci":"d2e1",
-         "san":"Ke1",
-         "zeroing":false,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":2,
-         "dtz":1
-      },
-      {
-         "uci":"d2e2",
-         "san":"Ke2",
-         "zeroing":false,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":2,
-         "dtz":1
-      },
-      {
-         "uci":"d2e3",
-         "san":"Ke3",
-         "zeroing":false,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":2,
-         "dtz":1
-      },
-      {
-         "uci":"c2c1q",
-         "san":"c1=Q",
-         "zeroing":true,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      },
-      {
-         "uci":"c2c1r",
-         "san":"c1=R",
-         "zeroing":true,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      },
-      {
-         "uci":"c2c1b",
-         "san":"c1=B",
-         "zeroing":true,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      },
-      {
-         "uci":"c2c1n",
-         "san":"c1=N",
-         "zeroing":true,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      },
-      {
-         "uci":"d2c1",
-         "san":"Kc1",
-         "zeroing":false,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      },
-      {
-         "uci":"d2d1",
-         "san":"Kd1",
-         "zeroing":false,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      },
-      {
-         "uci":"d2d3",
-         "san":"Kd3",
-         "zeroing":false,
-         "checkmate":false,
-         "stalemate":false,
-         "variant_win":false,
-         "variant_loss":false,
-         "insufficient_material":false,
-         "wdl":null,
-         "dtz":null
-      }
-   ]
+    "wdl": 0,
+    "dtz": 0,
+    "checkmate": false,
+    "stalemate": false,
+    "variant_win": false,
+    "variant_loss": false,
+    "insufficient_material": false,
+    "moves": [
+        { "uci": "h8g7", "san": "Kg7", "wdl": 0, "dtz": 0, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win":false, "variant_loss":false, "insufficient_material":false },
+        { "uci": "h8h7", "san": "Kh7", "wdl": 2, "dtz": 1, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
+        { "uci": "h8g8", "san": "Kg8", "wdl": 2, "dtz": 1, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
+        { "uci":"c6c7", "san": "c7", "wdl": 2, "dtz": 3, "zeroing": true, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false }
+    ]
 }
 ```
 
