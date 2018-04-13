@@ -160,27 +160,27 @@ impl MoveInfo {
 enum MoveOrder {
     Checkmate,
     VariantLoss,
-    WinningZeroing {
+    LosingZeroing {
         dtz: Dtz,
     },
-    Winning {
+    Losing {
         dtz: Dtz,
     },
     Unknown,
-    CursedWin {
+    BlessedLoss {
         dtz: Dtz,
     },
     Stalemate,
     InsufficientMaterial,
     ZeroingDraw,
     Draw,
-    BlessedLoss {
+    CursedWin {
         dtz: Dtz,
     },
-    Losing {
+    Winning {
         dtz: Dtz,
     },
-    LosingZeroing {
+    WinningZeroing {
         dtz: Dtz,
     },
     VariantWin,
