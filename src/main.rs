@@ -351,6 +351,7 @@ fn main() {
             .multiple(true))
         .arg(clap::Arg::with_name("bind")
             .long("bind")
+            .help("Listening address")
             .default_value("127.0.0.1:8080"))
         .get_matches();
 

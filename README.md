@@ -21,8 +21,8 @@ FLAGS:
 OPTIONS:
         --antichess <antichess>...    Directory with .gtbw, .gtbz, and pawnless .stbw and .stbz files
         --atomic <atomic>...          Directory with .atbw and .atbz files
-        --bind <bind>                  [default: 127.0.0.1:8080]
         --standard <standard>...      Directory with .rtbw and .rtbz files
+        --bind <bind>                 Listening address [default: 127.0.0.1:8080]
 ```
 
 HTTP API
@@ -40,18 +40,18 @@ name | type | default | description
 
 ```javascript
 {
-    "wdl": 0,
-    "dtz": 0,
+    "wdl": 0, // 2 win, 1 cursed win, 0 draw, -1 blessed loss, -2 loss
+    "dtz": 0, // distance to zeroing
     "checkmate": false,
     "stalemate": false,
-    "variant_win": false,
-    "variant_loss": false,
+    "variant_win": false, // only useful in chess variants (atomic, antichess)
+    "variant_loss": false, // only useful in chess variants
     "insufficient_material": false,
     "moves": [
         { "uci": "h8g7", "san": "Kg7", "wdl": 0, "dtz": 0, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win":false, "variant_loss":false, "insufficient_material":false },
         { "uci": "h8h7", "san": "Kh7", "wdl": 2, "dtz": 1, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
         { "uci": "h8g8", "san": "Kg8", "wdl": 2, "dtz": 1, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
-        { "uci":"c6c7", "san": "c7", "wdl": 2, "dtz": 3, "zeroing": true, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false }
+        { "uci": "c6c7", "san": "c7", "wdl": 2, "dtz": 3, "zeroing": true, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false }
     ]
 }
 ```
@@ -59,30 +59,6 @@ name | type | default | description
 ### `GET /v1/atomic`
 
 ### `GET /v1/antichess`
-
-
-Example
--------
-
-```rust
-use shakmaty::Chess;
-use shakmaty::fen::Fen;
-use shakmaty_syzygy::{Tablebases, Wdl, Dtz, Syzygy};
-
-let mut tables = Tablebases::new();
-tables.add_directory("tables/regular")?;
-
-let pos: Chess = "8/8/8/8/B7/N7/K2k4/8 b - - 0 1"
-    .parse::<Fen>()?
-    .position()?;
-
-let wdl = tables.probe_wdl(&pos)?;
-assert_eq!(wdl, Wdl::Loss);
-
-let dtz = tables.probe_dtz(&pos)?;
-assert_eq!(dtz, Dtz(-59));
-```
-
 
 License
 -------
