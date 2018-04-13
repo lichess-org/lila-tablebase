@@ -102,7 +102,7 @@ impl VariantPosition {
 struct TablebaseResult {
     #[serde(flatten)]
     probe: ProbeResult,
-    moves: ArrayVec<[MoveInfo; 512]>,
+    moves: ArrayVec<[MoveInfo; 256]>,
 }
 
 #[derive(Serialize)]
@@ -158,20 +158,20 @@ impl MoveInfo {
 enum MoveOrder {
     Checkmate,
     VariantLoss,
-    CursedWin {
-        dtz: i16,
-    },
     WinningZeroing {
         dtz: i16,
     },
     Winning {
         dtz: i16,
     },
+    Unknown,
+    CursedWin {
+        dtz: i16,
+    },
     Stalemate,
     InsufficientMaterial,
     ZeroingDraw,
     Draw,
-    Unknown,
     BlessedLoss {
         dtz: i16,
     },
