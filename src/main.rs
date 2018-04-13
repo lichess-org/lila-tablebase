@@ -8,12 +8,64 @@ extern crate futures;
 use std::sync::Arc;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
-use shakmaty::Chess;
-use shakmaty_syzygy::{Tablebases, Wdl, SyzygyError, Syzygy};
+use shakmaty::{Color, Chess, Setup, Position, MoveList, Outcome};
+use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError, Syzygy};
 use futures::future::{Future, ok};
 
 struct State {
     tablebase: TablebaseStub,
+}
+
+enum VariantPosition {
+    Regular(Chess),
+}
+
+impl VariantPosition {
+    fn is_checkmate(&self) -> bool {
+        match self {
+            VariantPosition::Regular(pos) => pos.is_checkmate(),
+        }
+    }
+
+    fn is_stalemate(&self) -> bool {
+        match self {
+            VariantPosition::Regular(pos) => pos.is_stalemate(),
+        }
+    }
+
+    fn turn(&self) -> Color {
+        match self {
+            VariantPosition::Regular(pos) => pos.turn(),
+        }
+    }
+
+    fn is_insufficient_material(&self) -> bool {
+        match self {
+            VariantPosition::Regular(pos) => pos.is_insufficient_material(),
+        }
+    }
+
+    fn variant_outcome(&self) -> Option<Outcome> {
+        match self {
+            VariantPosition::Regular(pos) => pos.variant_outcome(),
+        }
+    }
+
+    fn halfmove_clock(&self) -> u32 {
+        match self {
+            VariantPosition::Regular(pos) => pos.halfmove_clock(),
+        }
+    }
+}
+
+struct ProbeResult {
+    checkmate: bool,
+    stalemate: bool,
+    variant_win: bool,
+    variant_loss: bool,
+    insufficient_material: bool,
+    wdl: Option<Wdl>,
+    dtz: Option<Dtz>,
 }
 
 #[derive(Clone)]
@@ -26,33 +78,58 @@ impl TablebaseStub {
         TablebaseStub { addr }
     }
 
-    fn query(&self, pos: Chess) -> impl Future<Item=Result<Wdl, SyzygyError>, Error=MailboxError> {
-        self.addr.send(Query { chess: pos })
+    fn query(&self, pos: Chess) -> impl Future<Item=Result<ProbeResult, SyzygyError>, Error=MailboxError> {
+        self.addr.send(VariantPosition::Regular(pos))
     }
 }
 
 struct Tablebase {
-    tables: Arc<Tablebases<Chess>>,
+    regular: Arc<Tablebases<Chess>>,
+}
+
+impl Tablebase {
+    fn probe(&self, pos: &VariantPosition) -> Result<ProbeResult, SyzygyError> {
+        let (variant_win, variant_loss) = match pos.variant_outcome() {
+            Some(Outcome::Decisive { winner }) =>
+                (winner == pos.turn(), winner != pos.turn()),
+            _ =>
+                (false, false),
+        };
+
+        let dtz = match pos {
+            VariantPosition::Regular(pos) => self.regular.probe_dtz(pos).ok(),
+        };
+
+        let wdl = dtz.map(Wdl::from).or_else(|| match pos {
+            VariantPosition::Regular(pos) => self.regular.probe_wdl(pos).ok(),
+        });
+
+        Ok(ProbeResult {
+            checkmate: pos.is_checkmate(),
+            stalemate: pos.is_stalemate(),
+            variant_win,
+            variant_loss,
+            insufficient_material: pos.is_insufficient_material(),
+            dtz: dtz,
+            wdl: wdl,
+        })
+    }
 }
 
 impl Actor for Tablebase {
     type Context = SyncContext<Self>;
 }
 
-struct Query {
-    chess: Chess,
-}
+impl Handler<VariantPosition> for Tablebase {
+    type Result = Result<ProbeResult, SyzygyError>;
 
-impl Handler<Query> for Tablebase {
-    type Result = Result<Wdl, SyzygyError>;
-
-    fn handle(&mut self, msg: Query, _: &mut Self::Context) -> Self::Result {
-        Ok(Wdl::Win)
+    fn handle(&mut self, msg: VariantPosition, _: &mut Self::Context) -> Self::Result {
+        self.probe(&msg)
     }
 }
 
-impl Message for Query {
-    type Result = Result<Wdl, SyzygyError>;
+impl Message for VariantPosition {
+    type Result = Result<ProbeResult, SyzygyError>;
 }
 
 fn get_fen(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>> {
@@ -73,7 +150,7 @@ fn main() {
     let mut tables = Tablebases::<Chess>::new();
     let tables = Arc::new(tables);
 
-    let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase { tables: tables.clone() } ));
+    let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase { regular: tables.clone() } ));
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
