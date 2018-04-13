@@ -111,7 +111,7 @@ struct MoveInfo {
     san: String,
     zeroing: bool,
     #[serde(flatten)]
-    probe: ProbeResult,
+    probe: PositionInfo,
 }
 
 impl MoveInfo {
@@ -244,7 +244,7 @@ impl Tablebase {
                 dtz.map(|dtz| Wdl::from(Dtz(dtz.0.signum() * (dtz.0.abs() + halfmove_clock))))
             });
 
-        Ok(ProbeResult {
+        Ok(PositionInfo {
             checkmate: pos.is_checkmate(),
             stalemate: pos.is_stalemate(),
             variant_win,
