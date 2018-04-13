@@ -358,7 +358,7 @@ fn main() {
 
     let standard = Arc::new(standard);
 
-    let tablebase = TablebaseStub::new(SyncArbiter::start(1, move || Tablebase {
+    let tablebase = TablebaseStub::new(SyncArbiter::start(4, move || Tablebase {
         standard: standard.clone(),
     }));
 
