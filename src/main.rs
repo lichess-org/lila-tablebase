@@ -11,7 +11,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use std::cmp::min;
+use std::cmp::{min, Reverse};
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
@@ -297,7 +297,7 @@ impl Handler<VariantPosition> for Tablebase {
     fn handle(&mut self, pos: VariantPosition, _: &mut Self::Context) -> Self::Result {
         let mut moves = MoveList::new();
         pos.legal_moves(&mut moves);
-        moves.sort_by_key(|m| m.promotion());
+        moves.sort_by_key(|m| Reverse(m.promotion()));
 
         let mut move_info = ArrayVec::new();
 
