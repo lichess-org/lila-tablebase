@@ -16,7 +16,7 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
-use shakmaty::{Color, Move, Setup, Position, MoveList, Outcome};
+use shakmaty::{Color, Role, Move, Setup, Position, MoveList, Outcome};
 use shakmaty::variants::{Chess, Atomic, Giveaway};
 use shakmaty::fen::Fen;
 use shakmaty::uci::{uci, Uci};
@@ -137,6 +137,8 @@ struct MoveInfo {
     uci: String,
     san: String,
     zeroing: bool,
+    #[serde(skip)]
+    capture: Option<Role>,
     #[serde(flatten)]
     pos: PositionInfo,
 }
@@ -160,9 +162,15 @@ impl MoveInfo {
                 MoveOrder::BlessedLoss { dtz: Reverse(dtz) }
             } else if self.zeroing {
                 if wdl == Wdl::Win  {
-                    MoveOrder::WinningZeroing { dtz: Reverse(dtz) }
+                    MoveOrder::WinningZeroing {
+                        capture: self.capture.map(Reverse),
+                        dtz: Reverse(dtz),
+                    }
                 } else if wdl == Wdl::Loss {
-                    MoveOrder::LosingZeroing { dtz: Reverse(dtz) }
+                    MoveOrder::LosingZeroing {
+                        capture: Reverse(self.capture),
+                        dtz: Reverse(dtz),
+                    }
                 } else {
                     MoveOrder::ZeroingDraw
                 }
@@ -186,6 +194,7 @@ enum MoveOrder {
     Checkmate,
     VariantLoss,
     LosingZeroing {
+        capture: Reverse<Option<Role>>,
         dtz: Reverse<Dtz>,
     },
     Losing {
@@ -206,6 +215,7 @@ enum MoveOrder {
         dtz: Reverse<Dtz>,
     },
     WinningZeroing {
+        capture: Option<Reverse<Role>>,
         dtz: Reverse<Dtz>,
     },
     VariantWin,
@@ -309,6 +319,7 @@ impl Handler<VariantPosition> for Tablebase {
                 uci: pos.uci(&m).to_string(),
                 san: pos.clone().san_plus(&m).to_string(),
                 pos: self.position_info(&after)?,
+                capture: m.capture(),
                 zeroing: m.is_zeroing(),
             });
         }
