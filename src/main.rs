@@ -16,7 +16,8 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
-use shakmaty::{Color, Move, Chess, Setup, Position, MoveList, Outcome};
+use shakmaty::{Color, Move, Setup, Position, MoveList, Outcome};
+use shakmaty::variants::{Chess, Atomic, Giveaway};
 use shakmaty::fen::Fen;
 use shakmaty::uci::{uci, Uci};
 use shakmaty::san::{san_plus, SanPlus};
@@ -30,72 +31,96 @@ struct State {
 #[derive(Clone)]
 enum VariantPosition {
     Standard(Chess),
+    Atomic(Atomic),
+    Antichess(Giveaway),
 }
 
 impl VariantPosition {
     fn is_checkmate(&self) -> bool {
         match self {
             VariantPosition::Standard(pos) => pos.is_checkmate(),
+            VariantPosition::Atomic(pos) => pos.is_checkmate(),
+            VariantPosition::Antichess(pos) => pos.is_checkmate(),
         }
     }
 
     fn is_stalemate(&self) -> bool {
         match self {
             VariantPosition::Standard(pos) => pos.is_stalemate(),
+            VariantPosition::Atomic(pos) => pos.is_stalemate(),
+            VariantPosition::Antichess(pos) => pos.is_stalemate(),
         }
     }
 
     fn turn(&self) -> Color {
         match self {
             VariantPosition::Standard(pos) => pos.turn(),
+            VariantPosition::Atomic(pos) => pos.turn(),
+            VariantPosition::Antichess(pos) => pos.turn(),
         }
     }
 
     fn is_insufficient_material(&self) -> bool {
         match self {
             VariantPosition::Standard(pos) => pos.is_insufficient_material(),
+            VariantPosition::Atomic(pos) => pos.is_insufficient_material(),
+            VariantPosition::Antichess(pos) => pos.is_insufficient_material(),
         }
     }
 
     fn outcome(&self) -> Option<Outcome> {
         match self {
             VariantPosition::Standard(pos) => pos.outcome(),
+            VariantPosition::Atomic(pos) => pos.outcome(),
+            VariantPosition::Antichess(pos) => pos.outcome(),
         }
     }
 
     fn variant_outcome(&self) -> Option<Outcome> {
         match self {
             VariantPosition::Standard(pos) => pos.variant_outcome(),
+            VariantPosition::Atomic(pos) => pos.variant_outcome(),
+            VariantPosition::Antichess(pos) => pos.variant_outcome(),
         }
     }
 
     fn halfmove_clock(&self) -> u32 {
         match self {
             VariantPosition::Standard(pos) => pos.halfmove_clock(),
+            VariantPosition::Atomic(pos) => pos.halfmove_clock(),
+            VariantPosition::Antichess(pos) => pos.halfmove_clock(),
         }
     }
 
     fn legal_moves(&self, moves: &mut MoveList) {
         match self {
             VariantPosition::Standard(pos) => pos.legal_moves(moves),
+            VariantPosition::Atomic(pos) => pos.legal_moves(moves),
+            VariantPosition::Antichess(pos) => pos.legal_moves(moves),
         }
     }
 
     fn play_unchecked(&mut self, m: &Move) {
         match self {
             VariantPosition::Standard(pos) => pos.play_unchecked(m),
+            VariantPosition::Atomic(pos) => pos.play_unchecked(m),
+            VariantPosition::Antichess(pos) => pos.play_unchecked(m),
         }
     }
 
     fn uci(&self, m: &Move) -> Uci {
         match self {
-            VariantPosition::Standard(pos) => uci(pos, m)
+            VariantPosition::Standard(pos) => uci(pos, m),
+            VariantPosition::Atomic(pos) => uci(pos, m),
+            VariantPosition::Antichess(pos) => uci(pos, m),
         }
     }
 
     fn san_plus(self, m: &Move) -> SanPlus {
         match self {
-            VariantPosition::Standard(pos) => san_plus(pos, m)
+            VariantPosition::Standard(pos) => san_plus(pos, m),
+            VariantPosition::Atomic(pos) => san_plus(pos, m),
+            VariantPosition::Antichess(pos) => san_plus(pos, m),
         }
     }
 }
@@ -214,6 +239,8 @@ impl TablebaseStub {
 
 struct Tablebase {
     standard: Arc<Tablebases<Chess>>,
+    atomic: Arc<Tablebases<Atomic>>,
+    antichess: Arc<Tablebases<Giveaway>>,
 }
 
 impl Tablebase {
@@ -229,6 +256,8 @@ impl Tablebase {
 
         let dtz = match pos {
             VariantPosition::Standard(pos) => self.standard.probe_dtz(pos),
+            VariantPosition::Atomic(pos) => self.atomic.probe_dtz(pos),
+            VariantPosition::Antichess(pos) => self.antichess.probe_dtz(pos),
         };
 
         let dtz = match dtz {
@@ -311,6 +340,8 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>
 
     let pos = match req.match_info().get("variant") {
         Some("standard") => fen.position().map(VariantPosition::Standard),
+        Some("atomic") => fen.position().map(VariantPosition::Atomic),
+        Some("antichess") => fen.position().map(VariantPosition::Antichess),
         _ => return Box::new(ok(HttpResponse::NotFound().body("variant not found"))),
     };
 
@@ -360,6 +391,8 @@ fn main() {
     let system = actix::System::new("lila-tablebase");
 
     let mut standard = Tablebases::<Chess>::new();
+    let mut atomic = Tablebases::<Atomic>::new();
+    let mut antichess = Tablebases::<Giveaway>::new();
 
     if let Some(paths) = args.values_of_os("standard") {
         for path in paths {
@@ -367,10 +400,26 @@ fn main() {
         }
     }
 
+    if let Some(paths) = args.values_of_os("atomic") {
+        for path in paths {
+            atomic.add_directory(path).expect("open atomic directory");
+        }
+    }
+
+    if let Some(paths) = args.values_of_os("antichess") {
+        for path in paths {
+            antichess.add_directory(path).expect("open antichess directory");
+        }
+    }
+
     let standard = Arc::new(standard);
+    let atomic = Arc::new(atomic);
+    let antichess = Arc::new(antichess);
 
     let tablebase = TablebaseStub::new(SyncArbiter::start(4, move || Tablebase {
         standard: standard.clone(),
+        atomic: atomic.clone(),
+        antichess: antichess.clone(),
     }));
 
     let server = server::new(move || {
