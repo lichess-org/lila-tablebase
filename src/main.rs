@@ -416,7 +416,12 @@ fn main() {
     let atomic = Arc::new(atomic);
     let antichess = Arc::new(antichess);
 
-    let tablebase = TablebaseStub::new(SyncArbiter::start(4, move || Tablebase {
+    // Throughput of the tablebase actor is limited by rotating disk I/O.
+    let num_disks = 5;
+    // Throughput should not be limited by the HTTP server itself.
+    let num_threads = 1;
+
+    let tablebase = TablebaseStub::new(SyncArbiter::start(num_disks, move || Tablebase {
         standard: standard.clone(),
         atomic: atomic.clone(),
         antichess: antichess.clone(),
@@ -427,6 +432,6 @@ fn main() {
             .resource("/api/v1/{variant}", |r| r.get().f(api_v1))
     });
 
-    server.bind(args.value_of("bind").unwrap()).unwrap().start();
+    server.threads(num_threads).bind(args.value_of("bind").unwrap()).unwrap().start();
     system.run();
 }
