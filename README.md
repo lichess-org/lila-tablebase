@@ -1,7 +1,7 @@
 lila-tablebase
 ==============
 
-Tablebase server for [lichess.org](https://tablebase.lichess.org).
+Tablebase server for [lichess.org](https://tablebase.lichess.ovh).
 
 Usage
 -----
@@ -31,7 +31,7 @@ HTTP API
 ### `GET /standard`
 
 ```
-curl https://tablebase.lichess.org/standard?fen=7K/8/k1P5/7p/8/8/8/8%20w%20-%20-%200%201
+curl https://tablebase.lichess.ovh/standard?fen=7K/8/k1P5/7p/8/8/8/8%20w%20-%20-%200%201
 ```
 
 name | type | default | description
