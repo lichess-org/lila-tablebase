@@ -157,12 +157,12 @@ impl MoveInfo {
             if wdl == Wdl::CursedWin {
                 MoveOrder::CursedWin { dtz: Reverse(dtz) }
             } else if wdl == Wdl::BlessedLoss {
-                MoveOrder::BlessedLoss { dtz }
+                MoveOrder::BlessedLoss { dtz: Reverse(dtz) }
             } else if self.zeroing {
                 if wdl == Wdl::Win  {
                     MoveOrder::WinningZeroing { dtz: Reverse(dtz) }
                 } else if wdl == Wdl::Loss {
-                    MoveOrder::LosingZeroing { dtz }
+                    MoveOrder::LosingZeroing { dtz: Reverse(dtz) }
                 } else {
                     MoveOrder::ZeroingDraw
                 }
@@ -170,7 +170,7 @@ impl MoveInfo {
                 if wdl == Wdl::Win {
                     MoveOrder::Winning { dtz: Reverse(dtz) }
                 } else if wdl == Wdl::Loss {
-                    MoveOrder::Losing { dtz }
+                    MoveOrder::Losing { dtz: Reverse(dtz) }
                 } else {
                     MoveOrder::Draw
                 }
@@ -186,14 +186,14 @@ enum MoveOrder {
     Checkmate,
     VariantLoss,
     LosingZeroing {
-        dtz: Dtz,
+        dtz: Reverse<Dtz>,
     },
     Losing {
-        dtz: Dtz,
+        dtz: Reverse<Dtz>,
     },
     Unknown,
     BlessedLoss {
-        dtz: Dtz,
+        dtz: Reverse<Dtz>,
     },
     Stalemate,
     InsufficientMaterial,
