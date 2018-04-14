@@ -16,6 +16,7 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
+use actix_web::middleware::Logger;
 use shakmaty::{Color, Role, Move, Setup, Position, MoveList, Outcome};
 use shakmaty::variants::{Chess, Atomic, Giveaway};
 use shakmaty::fen::Fen;
@@ -441,6 +442,7 @@ fn main() {
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
+            .middleware(Logger::default())
             .resource("/{variant}", |r| r.get().f(api_v1))
     });
 
