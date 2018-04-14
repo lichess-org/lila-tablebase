@@ -1,6 +1,7 @@
 [package]
 name = "lila-tablebase"
 version = "0.1.0" # remember to update html_root_url
+publish = false
 description = "A Syzygy tablebase server"
 homepage = "https://tablebase.lichess.org"
 repository = "https://github.com/niklasf/lila-tablebase"
