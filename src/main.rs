@@ -352,7 +352,7 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>
     };
 
     let pos = match req.match_info().get("variant") {
-        Some("standard") => fen.position().map(VariantPosition::Standard),
+        Some("standard") | Some("chess960") => fen.position().map(VariantPosition::Standard),
         Some("atomic") => fen.position().map(VariantPosition::Atomic),
         Some("antichess") => fen.position().map(VariantPosition::Antichess),
         _ => return Box::new(ok(HttpResponse::NotFound().body("variant not found"))),
