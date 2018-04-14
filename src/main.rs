@@ -155,12 +155,12 @@ impl MoveInfo {
             MoveOrder::InsufficientMaterial
         } else if let (Some(wdl), Some(dtz)) = (self.pos.wdl, self.pos.dtz) {
             if wdl == Wdl::CursedWin {
-                MoveOrder::CursedWin { dtz }
+                MoveOrder::CursedWin { dtz: Reverse(dtz) }
             } else if wdl == Wdl::BlessedLoss {
                 MoveOrder::BlessedLoss { dtz }
             } else if self.zeroing {
                 if wdl == Wdl::Win  {
-                    MoveOrder::WinningZeroing { dtz }
+                    MoveOrder::WinningZeroing { dtz: Reverse(dtz) }
                 } else if wdl == Wdl::Loss {
                     MoveOrder::LosingZeroing { dtz }
                 } else {
@@ -168,7 +168,7 @@ impl MoveInfo {
                 }
             } else {
                 if wdl == Wdl::Win {
-                    MoveOrder::Winning { dtz }
+                    MoveOrder::Winning { dtz: Reverse(dtz) }
                 } else if wdl == Wdl::Loss {
                     MoveOrder::Losing { dtz }
                 } else {
@@ -200,13 +200,13 @@ enum MoveOrder {
     ZeroingDraw,
     Draw,
     CursedWin {
-        dtz: Dtz,
+        dtz: Reverse<Dtz>,
     },
     Winning {
-        dtz: Dtz,
+        dtz: Reverse<Dtz>,
     },
     WinningZeroing {
-        dtz: Dtz,
+        dtz: Reverse<Dtz>,
     },
     VariantWin,
 }
