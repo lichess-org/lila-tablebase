@@ -28,10 +28,10 @@ OPTIONS:
 HTTP API
 --------
 
-### `GET /v1/standard`
+### `GET /standard`
 
 ```
-curl https://tablebase.lichess.org/v1/standard?fen=7K/8/k1P5/7p/8/8/8/8%20w%20-%20-%200%201
+curl https://tablebase.lichess.org/standard?fen=7K/8/k1P5/7p/8/8/8/8%20w%20-%20-%200%201
 ```
 
 name | type | default | description
@@ -56,9 +56,9 @@ name | type | default | description
 }
 ```
 
-### `GET /v1/atomic`
+### `GET /atomic`
 
-### `GET /v1/antichess`
+### `GET /antichess`
 
 Acknowledgements
 ----------------

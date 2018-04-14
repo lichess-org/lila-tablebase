@@ -429,7 +429,7 @@ fn main() {
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
-            .resource("/api/v1/{variant}", |r| r.get().f(api_v1))
+            .resource("/{variant}", |r| r.get().f(api_v1))
     });
 
     server.threads(num_threads).bind(args.value_of("bind").unwrap()).unwrap().start();
