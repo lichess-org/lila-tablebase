@@ -11,7 +11,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use std::cmp::{min, Reverse};
+use std::cmp::{min, max, Reverse};
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
@@ -255,6 +255,64 @@ struct Tablebase {
 }
 
 impl Tablebase {
+    fn probe_wdl(&self, pos: &VariantPosition) -> Result<Wdl, SyzygyError> {
+        match pos {
+            VariantPosition::Standard(pos) => self.standard.probe_wdl(pos),
+            VariantPosition::Atomic(pos) => self.atomic.probe_wdl(pos),
+            VariantPosition::Antichess(pos) => self.antichess.probe_wdl(pos),
+        }
+    }
+
+    fn probe_dtz(&self, pos: &VariantPosition) -> Result<Dtz, SyzygyError> {
+        match pos {
+            VariantPosition::Standard(pos) => self.standard.probe_dtz(pos),
+            VariantPosition::Atomic(pos) => self.atomic.probe_dtz(pos),
+            VariantPosition::Antichess(pos) => self.antichess.probe_dtz(pos),
+        }
+    }
+
+    fn real_wdl(&self, pos: &VariantPosition, alpha: Wdl, beta: Wdl, dtz: Option<Dtz>) -> Result<Wdl, SyzygyError> {
+        let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
+
+        if halfmove_clock == 0 {
+            self.probe_wdl(pos)
+        } else {
+            let mut moves = MoveList::new();
+            pos.legal_moves(&mut moves);
+            if moves.is_empty() {
+                return Ok(Wdl::from_outcome(&pos.outcome().expect("end of game"), pos.turn()));
+            }
+
+            let dtz = match dtz {
+                Some(dtz) => dtz,
+                None => self.probe_dtz(pos)?,
+            };
+
+            let dtz = dtz.add_plies(halfmove_clock);
+
+            let mut best = max(alpha, if dtz == Dtz(100) {
+                Wdl::CursedWin
+            } else if dtz == Dtz(-100) {
+                Wdl::Loss
+            } else {
+                return Ok(Wdl::from(dtz))
+            });
+
+            for m in moves {
+                let mut after = pos.clone();
+                after.play_unchecked(&m);
+                let v = -self.real_wdl(&after, -beta, -best, None)?;
+
+                best = max(best, v);
+                if best >= beta {
+                    break;
+                }
+            }
+
+            Ok(best)
+        }
+    }
+
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
             Some(Outcome::Decisive { winner }) =>
@@ -263,28 +321,19 @@ impl Tablebase {
                 (false, false),
         };
 
-        let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
+        fn user_error_as_none<T>(res: Result<T, SyzygyError>) -> Result<Option<T>, SyzygyError> {
+            match res {
+                Err(SyzygyError::Castling) |
+                Err(SyzygyError::TooManyPieces) |
+                Err(SyzygyError::MissingTable { .. }) =>
+                    Ok(None), // user error
+                Err(err) => Err(err), // server error
+                Ok(res) => Ok(Some(res)),
+            }
+        }
 
-        let dtz = match pos {
-            VariantPosition::Standard(pos) => self.standard.probe_dtz(pos),
-            VariantPosition::Atomic(pos) => self.atomic.probe_dtz(pos),
-            VariantPosition::Antichess(pos) => self.antichess.probe_dtz(pos),
-        };
-
-        let dtz = match dtz {
-            Err(SyzygyError::Castling) |
-            Err(SyzygyError::TooManyPieces) |
-            Err(SyzygyError::MissingTable { .. }) =>
-                None, // acceptable errors
-            _ =>
-                Some(dtz?),
-        };
-
-        let wdl = pos.outcome()
-            .map(|o| Wdl::from_outcome(&o, pos.turn()))
-            .or_else(|| {
-                dtz.map(|dtz| Wdl::from(Dtz(dtz.0.signum() * (dtz.0.abs() + halfmove_clock))))
-            });
+        let dtz = user_error_as_none(self.probe_dtz(pos))?;
+        let wdl = user_error_as_none(self.real_wdl(pos, Wdl::Loss, Wdl::Win, dtz))?;
 
         Ok(PositionInfo {
             checkmate: pos.is_checkmate(),
