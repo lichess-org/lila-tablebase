@@ -272,16 +272,41 @@ impl Tablebase {
         }
     }
 
+    fn best_move(&self, pos: &VariantPosition) -> Result<Option<(Move, Dtz)>, SyzygyError> {
+        struct MoveEval {
+            m: Move,
+            zeroing: bool,
+            wdl: Wdl,
+            dtz: Dtz,
+        }
+
+        let mut legals = MoveList::new();
+        pos.legal_moves(&mut legals);
+
+        let mut moves: ArrayVec<[MoveEval; 256]> = ArrayVec::new();
+        for m in legals {
+            moves.push(MoveEval {
+                zeroing: m.is_zeroing(),
+                m,
+                wdl: self.probe_wdl(pos)?,
+                dtz: self.probe_dtz(pos)?,
+            });
+        }
+
+        moves.sort_unstable_by_key(|m| m.dtz);
+        moves.sort_by_key(|m| if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing });
+
+        Ok(moves.first().map(|m| (m.m.clone(), m.dtz)))
+    }
+
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
         let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
         if halfmove_clock == 0 {
             return self.probe_wdl(pos);
         }
 
-        let mut moves = MoveList::new();
-        pos.legal_moves(&mut moves);
-        if moves.is_empty() {
-            return Ok(Wdl::from_outcome(&pos.outcome().expect("end of game"), pos.turn()));
+        if let Some(ref outcome) = pos.outcome() {
+            return Ok(Wdl::from_outcome(outcome, pos.turn()));
         }
 
         let dtz = dtz.add_plies(halfmove_clock);
@@ -289,24 +314,10 @@ impl Tablebase {
             return Ok(Wdl::from(dtz))
         }
 
-        let mut best = None;
-
-        for m in moves {
-            let mut after = pos.clone();
-            after.play_unchecked(&m);
-            let dtz_after = self.probe_dtz(&after)?;
-            if let Some((ref mut best_pos, ref mut best_dtz)) = best {
-                if dtz_after < *best_dtz {
-                    *best_pos = after;
-                    *best_dtz = dtz_after;
-                }
-            } else {
-                best = Some((after, dtz_after));
-            }
-        }
-
-        let best = best.expect("has moves");
-        Ok(-self.real_wdl(&best.0, best.1)?)
+        let best = self.best_move(pos)?.expect("has moves");
+        let mut after = pos.clone();
+        after.play_unchecked(&best.0);
+        Ok(-self.real_wdl(&after, best.1)?)
     }
 
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
