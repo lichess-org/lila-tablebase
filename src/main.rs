@@ -2,6 +2,8 @@ extern crate arrayvec;
 extern crate actix;
 extern crate actix_web;
 extern crate clap;
+#[macro_use]
+extern crate log;
 extern crate env_logger;
 extern crate shakmaty;
 extern crate shakmaty_syzygy;
@@ -16,10 +18,9 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
-use actix_web::middleware::Logger;
 use shakmaty::{Color, Role, Move, Setup, Position, MoveList, Outcome};
 use shakmaty::variants::{Chess, Atomic, Giveaway};
-use shakmaty::fen::Fen;
+use shakmaty::fen::{Fen, FenOpts};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError};
@@ -413,6 +414,15 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>
         return Box::new(ok(HttpResponse::BadRequest().body("fen illegal")));
     };
 
+    match pos {
+        VariantPosition::Standard(ref pos) =>
+            info!("standard fen: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Atomic(ref pos) =>
+            info!("atomic fen: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Antichess(ref pos) =>
+            info!("antichess fen: {}", FenOpts::default().promoted(true).fen(pos)),
+    }
+
     req.state().tablebase.query(pos)
         .from_err()
         .map(|res| match res {
@@ -448,7 +458,7 @@ fn main() {
             .default_value("127.0.0.1:8080"))
         .get_matches();
 
-    ::std::env::set_var("RUST_LOG", "actix_web=info");
+    ::std::env::set_var("RUST_LOG", "info");
     let _ = env_logger::init();
     let system = actix::System::new("lila-tablebase");
 
@@ -491,7 +501,6 @@ fn main() {
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
-            .middleware(Logger::default())
             .resource("/{variant}", |r| r.get().f(api_v1))
     });
 
