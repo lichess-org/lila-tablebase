@@ -356,6 +356,15 @@ impl Handler<VariantPosition> for Tablebase {
     type Result = Result<TablebaseResponse, SyzygyError>;
 
     fn handle(&mut self, pos: VariantPosition, _: &mut Self::Context) -> Self::Result {
+        match pos {
+            VariantPosition::Standard(ref pos) =>
+                info!("standard fen: {}", FenOpts::default().fen(pos)),
+            VariantPosition::Atomic(ref pos) =>
+                info!("atomic fen: {}", FenOpts::default().fen(pos)),
+            VariantPosition::Antichess(ref pos) =>
+                info!("antichess fen: {}", FenOpts::default().promoted(true).fen(pos)),
+        }
+
         let mut moves = MoveList::new();
         pos.legal_moves(&mut moves);
         moves.sort_by_key(|m| Reverse(m.promotion()));
@@ -413,15 +422,6 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>
     } else {
         return Box::new(ok(HttpResponse::BadRequest().body("fen illegal")));
     };
-
-    match pos {
-        VariantPosition::Standard(ref pos) =>
-            info!("standard fen: {}", FenOpts::default().fen(pos)),
-        VariantPosition::Atomic(ref pos) =>
-            info!("atomic fen: {}", FenOpts::default().fen(pos)),
-        VariantPosition::Antichess(ref pos) =>
-            info!("antichess fen: {}", FenOpts::default().promoted(true).fen(pos)),
-    }
 
     req.state().tablebase.query(pos)
         .from_err()
