@@ -13,7 +13,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use std::cmp::{min, max, Reverse};
+use std::cmp::{min, Reverse};
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
@@ -272,46 +272,41 @@ impl Tablebase {
         }
     }
 
-    fn real_wdl(&self, pos: &VariantPosition, alpha: Wdl, beta: Wdl, dtz: Option<Dtz>) -> Result<Wdl, SyzygyError> {
+    fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
         let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
-
         if halfmove_clock == 0 {
-            self.probe_wdl(pos)
-        } else {
-            let mut moves = MoveList::new();
-            pos.legal_moves(&mut moves);
-            if moves.is_empty() {
-                return Ok(Wdl::from_outcome(&pos.outcome().expect("end of game"), pos.turn()));
-            }
-
-            let dtz = match dtz {
-                Some(dtz) => dtz,
-                None => self.probe_dtz(pos)?,
-            };
-
-            let dtz = dtz.add_plies(halfmove_clock);
-
-            let mut best = max(alpha, if dtz == Dtz(100) {
-                Wdl::CursedWin
-            } else if dtz == Dtz(-100) {
-                Wdl::Loss
-            } else {
-                return Ok(Wdl::from(dtz))
-            });
-
-            for m in moves {
-                let mut after = pos.clone();
-                after.play_unchecked(&m);
-                let v = -self.real_wdl(&after, -beta, -best, None)?;
-
-                best = max(best, v);
-                if best >= beta {
-                    break;
-                }
-            }
-
-            Ok(best)
+            return self.probe_wdl(pos);
         }
+
+        let mut moves = MoveList::new();
+        pos.legal_moves(&mut moves);
+        if moves.is_empty() {
+            return Ok(Wdl::from_outcome(&pos.outcome().expect("end of game"), pos.turn()));
+        }
+
+        let dtz = dtz.add_plies(halfmove_clock);
+        if dtz.0.abs() != 100 {
+            return Ok(Wdl::from(dtz))
+        }
+
+        let mut best = None;
+
+        for m in moves {
+            let mut after = pos.clone();
+            after.play_unchecked(&m);
+            let dtz_after = self.probe_dtz(&after)?;
+            if let Some((ref mut best_pos, ref mut best_dtz)) = best {
+                if dtz_after < *best_dtz {
+                    *best_pos = after;
+                    *best_dtz = dtz_after;
+                }
+            } else {
+                best = Some((after, dtz_after));
+            }
+        }
+
+        let best = best.expect("has moves");
+        Ok(-self.real_wdl(&best.0, best.1)?)
     }
 
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
@@ -334,7 +329,12 @@ impl Tablebase {
         }
 
         let dtz = user_error_as_none(self.probe_dtz(pos))?;
-        let wdl = user_error_as_none(self.real_wdl(pos, Wdl::Loss, Wdl::Win, dtz))?;
+
+        let wdl = if let Some(dtz) = dtz {
+            user_error_as_none(self.real_wdl(pos, dtz))?
+        } else {
+            None
+        };
 
         Ok(PositionInfo {
             checkmate: pos.is_checkmate(),
