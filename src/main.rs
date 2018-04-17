@@ -16,7 +16,8 @@ extern crate serde_derive;
 use std::cmp::{min, Reverse};
 use std::sync::Arc;
 use arrayvec::ArrayVec;
-use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler, MailboxError};
+use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler};
+use actix::dev::Request;
 use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
 use shakmaty::{Color, Role, Move, Setup, Position, MoveList, Outcome};
 use shakmaty::variants::{Chess, Atomic, Giveaway};
@@ -39,82 +40,82 @@ enum VariantPosition {
 
 impl VariantPosition {
     fn is_checkmate(&self) -> bool {
-        match self {
-            VariantPosition::Standard(pos) => pos.is_checkmate(),
-            VariantPosition::Atomic(pos) => pos.is_checkmate(),
-            VariantPosition::Antichess(pos) => pos.is_checkmate(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.is_checkmate(),
+            VariantPosition::Atomic(ref pos) => pos.is_checkmate(),
+            VariantPosition::Antichess(ref pos) => pos.is_checkmate(),
         }
     }
 
     fn is_stalemate(&self) -> bool {
-        match self {
-            VariantPosition::Standard(pos) => pos.is_stalemate(),
-            VariantPosition::Atomic(pos) => pos.is_stalemate(),
-            VariantPosition::Antichess(pos) => pos.is_stalemate(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.is_stalemate(),
+            VariantPosition::Atomic(ref pos) => pos.is_stalemate(),
+            VariantPosition::Antichess(ref pos) => pos.is_stalemate(),
         }
     }
 
     fn turn(&self) -> Color {
-        match self {
-            VariantPosition::Standard(pos) => pos.turn(),
-            VariantPosition::Atomic(pos) => pos.turn(),
-            VariantPosition::Antichess(pos) => pos.turn(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.turn(),
+            VariantPosition::Atomic(ref pos) => pos.turn(),
+            VariantPosition::Antichess(ref pos) => pos.turn(),
         }
     }
 
     fn is_insufficient_material(&self) -> bool {
-        match self {
-            VariantPosition::Standard(pos) => pos.is_insufficient_material(),
-            VariantPosition::Atomic(pos) => pos.is_insufficient_material(),
-            VariantPosition::Antichess(pos) => pos.is_insufficient_material(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.is_insufficient_material(),
+            VariantPosition::Atomic(ref pos) => pos.is_insufficient_material(),
+            VariantPosition::Antichess(ref pos) => pos.is_insufficient_material(),
         }
     }
 
     fn outcome(&self) -> Option<Outcome> {
-        match self {
-            VariantPosition::Standard(pos) => pos.outcome(),
-            VariantPosition::Atomic(pos) => pos.outcome(),
-            VariantPosition::Antichess(pos) => pos.outcome(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.outcome(),
+            VariantPosition::Atomic(ref pos) => pos.outcome(),
+            VariantPosition::Antichess(ref pos) => pos.outcome(),
         }
     }
 
     fn variant_outcome(&self) -> Option<Outcome> {
-        match self {
-            VariantPosition::Standard(pos) => pos.variant_outcome(),
-            VariantPosition::Atomic(pos) => pos.variant_outcome(),
-            VariantPosition::Antichess(pos) => pos.variant_outcome(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.variant_outcome(),
+            VariantPosition::Atomic(ref pos) => pos.variant_outcome(),
+            VariantPosition::Antichess(ref pos) => pos.variant_outcome(),
         }
     }
 
     fn halfmove_clock(&self) -> u32 {
-        match self {
-            VariantPosition::Standard(pos) => pos.halfmove_clock(),
-            VariantPosition::Atomic(pos) => pos.halfmove_clock(),
-            VariantPosition::Antichess(pos) => pos.halfmove_clock(),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.halfmove_clock(),
+            VariantPosition::Atomic(ref pos) => pos.halfmove_clock(),
+            VariantPosition::Antichess(ref pos) => pos.halfmove_clock(),
         }
     }
 
     fn legal_moves(&self, moves: &mut MoveList) {
-        match self {
-            VariantPosition::Standard(pos) => pos.legal_moves(moves),
-            VariantPosition::Atomic(pos) => pos.legal_moves(moves),
-            VariantPosition::Antichess(pos) => pos.legal_moves(moves),
+        match *self {
+            VariantPosition::Standard(ref pos) => pos.legal_moves(moves),
+            VariantPosition::Atomic(ref pos) => pos.legal_moves(moves),
+            VariantPosition::Antichess(ref pos) => pos.legal_moves(moves),
         }
     }
 
     fn play_unchecked(&mut self, m: &Move) {
-        match self {
-            VariantPosition::Standard(pos) => pos.play_unchecked(m),
-            VariantPosition::Atomic(pos) => pos.play_unchecked(m),
-            VariantPosition::Antichess(pos) => pos.play_unchecked(m),
+        match *self {
+            VariantPosition::Standard(ref mut pos) => pos.play_unchecked(m),
+            VariantPosition::Atomic(ref mut pos) => pos.play_unchecked(m),
+            VariantPosition::Antichess(ref mut pos) => pos.play_unchecked(m),
         }
     }
 
     fn uci(&self, m: &Move) -> Uci {
-        match self {
-            VariantPosition::Standard(pos) => uci(pos, m),
-            VariantPosition::Atomic(pos) => uci(pos, m),
-            VariantPosition::Antichess(pos) => uci(pos, m),
+        match *self {
+            VariantPosition::Standard(ref pos) => uci(pos, m),
+            VariantPosition::Atomic(ref pos) => uci(pos, m),
+            VariantPosition::Antichess(ref pos) => uci(pos, m),
         }
     }
 
@@ -244,7 +245,7 @@ impl TablebaseStub {
         TablebaseStub { addr }
     }
 
-    fn query(&self, pos: VariantPosition) -> impl Future<Item=Result<TablebaseResponse, SyzygyError>, Error=MailboxError> {
+    fn query(&self, pos: VariantPosition) -> Request<Syn, Tablebase, VariantPosition> {
         self.addr.send(pos)
     }
 }
@@ -257,18 +258,18 @@ struct Tablebase {
 
 impl Tablebase {
     fn probe_wdl(&self, pos: &VariantPosition) -> Result<Wdl, SyzygyError> {
-        match pos {
-            VariantPosition::Standard(pos) => self.standard.probe_wdl(pos),
-            VariantPosition::Atomic(pos) => self.atomic.probe_wdl(pos),
-            VariantPosition::Antichess(pos) => self.antichess.probe_wdl(pos),
+        match *pos {
+            VariantPosition::Standard(ref pos) => self.standard.probe_wdl(pos),
+            VariantPosition::Atomic(ref pos) => self.atomic.probe_wdl(pos),
+            VariantPosition::Antichess(ref pos) => self.antichess.probe_wdl(pos),
         }
     }
 
     fn probe_dtz(&self, pos: &VariantPosition) -> Result<Dtz, SyzygyError> {
-        match pos {
-            VariantPosition::Standard(pos) => self.standard.probe_dtz(pos),
-            VariantPosition::Atomic(pos) => self.atomic.probe_dtz(pos),
-            VariantPosition::Antichess(pos) => self.antichess.probe_dtz(pos),
+        match *pos {
+            VariantPosition::Standard(ref pos) => self.standard.probe_dtz(pos),
+            VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
+            VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos),
         }
     }
 
