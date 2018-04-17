@@ -177,14 +177,12 @@ impl MoveInfo {
                 } else {
                     MoveOrder::ZeroingDraw
                 }
+            } else if wdl == Wdl::Win {
+                MoveOrder::Winning { dtz: Reverse(dtz) }
+            } else if wdl == Wdl::Loss {
+                MoveOrder::Losing { dtz: Reverse(dtz) }
             } else {
-                if wdl == Wdl::Win {
-                    MoveOrder::Winning { dtz: Reverse(dtz) }
-                } else if wdl == Wdl::Loss {
-                    MoveOrder::Losing { dtz: Reverse(dtz) }
-                } else {
-                    MoveOrder::Draw
-                }
+                MoveOrder::Draw
             }
         } else {
             MoveOrder::Unknown
