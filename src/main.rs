@@ -311,7 +311,7 @@ impl Tablebase {
 
         let dtz = dtz.add_plies(halfmove_clock);
         if dtz.0.abs() != 100 {
-            return Ok(Wdl::from(dtz))
+            return Ok(Wdl::from_dtz_after_zeroing(dtz))
         }
 
         let best = self.best_move(pos)?.expect("has moves");

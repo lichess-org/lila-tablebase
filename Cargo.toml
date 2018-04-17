@@ -24,7 +24,7 @@ clap = "2.31"
 log = "0.4"
 
 [dependencies.shakmaty-syzygy]
-version = "0.1"
+version = "0.2"
 features = ["serde-1"]
 
 [dependencies.arrayvec]
