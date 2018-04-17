@@ -1,31 +1,31 @@
-extern crate arrayvec;
 extern crate actix;
 extern crate actix_web;
+extern crate arrayvec;
 extern crate clap;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
-extern crate shakmaty;
-extern crate shakmaty_syzygy;
 extern crate futures;
 extern crate serde;
 extern crate serde_json;
+extern crate shakmaty;
+extern crate shakmaty_syzygy;
 #[macro_use]
 extern crate serde_derive;
 
+use actix::dev::Request;
+use actix::{Actor, Addr, Handler, Message, Syn, SyncArbiter, SyncContext};
+use actix_web::{server, App, AsyncResponder, Error, HttpRequest, HttpResponse, Result};
+use arrayvec::ArrayVec;
+use futures::future::{ok, Future};
+use shakmaty::fen::{Fen, FenOpts};
+use shakmaty::san::{san_plus, SanPlus};
+use shakmaty::uci::{uci, Uci};
+use shakmaty::variants::{Atomic, Chess, Giveaway};
+use shakmaty::{Color, Move, MoveList, Outcome, Position, Role, Setup};
+use shakmaty_syzygy::{Dtz, SyzygyError, Tablebases, Wdl};
 use std::cmp::{min, Reverse};
 use std::sync::Arc;
-use arrayvec::ArrayVec;
-use actix::{Addr, Syn, Message, Actor, SyncContext, SyncArbiter, Handler};
-use actix::dev::Request;
-use actix_web::{server, App, HttpRequest, HttpResponse, AsyncResponder, Error, Result};
-use shakmaty::{Color, Role, Move, Setup, Position, MoveList, Outcome};
-use shakmaty::variants::{Chess, Atomic, Giveaway};
-use shakmaty::fen::{Fen, FenOpts};
-use shakmaty::uci::{uci, Uci};
-use shakmaty::san::{san_plus, SanPlus};
-use shakmaty_syzygy::{Tablebases, Wdl, Dtz, SyzygyError};
-use futures::future::{Future, ok};
 
 struct State {
     tablebase: TablebaseStub,
@@ -164,7 +164,7 @@ impl MoveInfo {
             } else if wdl == Wdl::BlessedLoss {
                 MoveOrder::BlessedLoss { dtz: Reverse(dtz) }
             } else if self.zeroing {
-                if wdl == Wdl::Win  {
+                if wdl == Wdl::Win {
                     MoveOrder::WinningZeroing {
                         capture: self.capture.map(Reverse),
                         dtz: Reverse(dtz),
@@ -310,7 +310,7 @@ impl Tablebase {
 
         let dtz = dtz.add_plies(halfmove_clock);
         if dtz.0.abs() != 100 {
-            return Ok(Wdl::from_dtz_after_zeroing(dtz))
+            return Ok(Wdl::from_dtz_after_zeroing(dtz));
         }
 
         let best = self.best_move(pos)?.expect("has moves");
@@ -321,18 +321,15 @@ impl Tablebase {
 
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
-            Some(Outcome::Decisive { winner }) =>
-                (winner == pos.turn(), winner != pos.turn()),
-            _ =>
-                (false, false),
+            Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
+            _ => (false, false),
         };
 
         fn user_error_as_none<T>(res: Result<T, SyzygyError>) -> Result<Option<T>, SyzygyError> {
             match res {
-                Err(SyzygyError::Castling) |
-                Err(SyzygyError::TooManyPieces) |
-                Err(SyzygyError::MissingTable { .. }) =>
-                    Ok(None), // user error
+                Err(SyzygyError::Castling)
+                | Err(SyzygyError::TooManyPieces)
+                | Err(SyzygyError::MissingTable { .. }) => Ok(None), // user error
                 Err(err) => Err(err), // server error
                 Ok(res) => Ok(Some(res)),
             }
@@ -407,7 +404,7 @@ impl Message for VariantPosition {
     type Result = Result<TablebaseResponse, SyzygyError>;
 }
 
-fn api_v1(req: HttpRequest<State>) -> Box<Future<Item=HttpResponse, Error=Error>> {
+fn api_v1(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error>> {
     let fen = if let Some(fen) = req.query().get("fen") {
         fen
     } else {
