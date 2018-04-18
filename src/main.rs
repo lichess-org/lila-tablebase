@@ -22,7 +22,7 @@ use shakmaty::fen::{Fen, FenOpts};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
-use shakmaty::{Color, Move, MoveList, Outcome, Position, Role, Setup};
+use shakmaty::{Move, MoveList, Outcome, Position, Role};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebases, Wdl};
 use std::cmp::{min, Reverse};
 use std::sync::Arc;
@@ -39,75 +39,19 @@ enum VariantPosition {
 }
 
 impl VariantPosition {
-    fn is_checkmate(&self) -> bool {
+    fn borrow(&self) -> &Position {
         match *self {
-            VariantPosition::Standard(ref pos) => pos.is_checkmate(),
-            VariantPosition::Atomic(ref pos) => pos.is_checkmate(),
-            VariantPosition::Antichess(ref pos) => pos.is_checkmate(),
+            VariantPosition::Standard(ref pos) => pos,
+            VariantPosition::Atomic(ref pos) => pos,
+            VariantPosition::Antichess(ref pos) => pos,
         }
     }
 
-    fn is_stalemate(&self) -> bool {
+    fn borrow_mut(&mut self) -> &mut Position {
         match *self {
-            VariantPosition::Standard(ref pos) => pos.is_stalemate(),
-            VariantPosition::Atomic(ref pos) => pos.is_stalemate(),
-            VariantPosition::Antichess(ref pos) => pos.is_stalemate(),
-        }
-    }
-
-    fn turn(&self) -> Color {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos.turn(),
-            VariantPosition::Atomic(ref pos) => pos.turn(),
-            VariantPosition::Antichess(ref pos) => pos.turn(),
-        }
-    }
-
-    fn is_insufficient_material(&self) -> bool {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos.is_insufficient_material(),
-            VariantPosition::Atomic(ref pos) => pos.is_insufficient_material(),
-            VariantPosition::Antichess(ref pos) => pos.is_insufficient_material(),
-        }
-    }
-
-    fn outcome(&self) -> Option<Outcome> {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos.outcome(),
-            VariantPosition::Atomic(ref pos) => pos.outcome(),
-            VariantPosition::Antichess(ref pos) => pos.outcome(),
-        }
-    }
-
-    fn variant_outcome(&self) -> Option<Outcome> {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos.variant_outcome(),
-            VariantPosition::Atomic(ref pos) => pos.variant_outcome(),
-            VariantPosition::Antichess(ref pos) => pos.variant_outcome(),
-        }
-    }
-
-    fn halfmove_clock(&self) -> u32 {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos.halfmove_clock(),
-            VariantPosition::Atomic(ref pos) => pos.halfmove_clock(),
-            VariantPosition::Antichess(ref pos) => pos.halfmove_clock(),
-        }
-    }
-
-    fn legal_moves(&self, moves: &mut MoveList) {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos.legal_moves(moves),
-            VariantPosition::Atomic(ref pos) => pos.legal_moves(moves),
-            VariantPosition::Antichess(ref pos) => pos.legal_moves(moves),
-        }
-    }
-
-    fn play_unchecked(&mut self, m: &Move) {
-        match *self {
-            VariantPosition::Standard(ref mut pos) => pos.play_unchecked(m),
-            VariantPosition::Atomic(ref mut pos) => pos.play_unchecked(m),
-            VariantPosition::Antichess(ref mut pos) => pos.play_unchecked(m),
+            VariantPosition::Standard(ref mut pos) => pos,
+            VariantPosition::Atomic(ref mut pos) => pos,
+            VariantPosition::Antichess(ref mut pos) => pos,
         }
     }
 
@@ -280,7 +224,7 @@ impl Tablebase {
         }
 
         let mut legals = MoveList::new();
-        pos.legal_moves(&mut legals);
+        pos.borrow().legal_moves(&mut legals);
 
         let mut moves: ArrayVec<[MoveEval; 256]> = ArrayVec::new();
         for m in legals {
@@ -299,13 +243,13 @@ impl Tablebase {
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
-        let halfmove_clock = min(101, pos.halfmove_clock()) as i16;
+        let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i16;
         if halfmove_clock == 0 {
             return self.probe_wdl(pos);
         }
 
-        if let Some(ref outcome) = pos.outcome() {
-            return Ok(Wdl::from_outcome(outcome, pos.turn()));
+        if let Some(ref outcome) = pos.borrow().outcome() {
+            return Ok(Wdl::from_outcome(outcome, pos.borrow().turn()));
         }
 
         let dtz = dtz.add_plies(halfmove_clock);
@@ -315,14 +259,16 @@ impl Tablebase {
 
         let best = self.best_move(pos)?.expect("has moves");
         let mut after = pos.clone();
-        after.play_unchecked(&best.0);
+        after.borrow_mut().play_unchecked(&best.0);
         Ok(-self.real_wdl(&after, best.1)?)
     }
 
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
-        let (variant_win, variant_loss) = match pos.variant_outcome() {
-            Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
-            _ => (false, false),
+        let (variant_win, variant_loss) = match pos.borrow().variant_outcome() {
+            Some(Outcome::Decisive { winner }) =>
+                (winner == pos.borrow().turn(), winner != pos.borrow().turn()),
+            _ =>
+                (false, false),
         };
 
         fn user_error_as_none<T>(res: Result<T, SyzygyError>) -> Result<Option<T>, SyzygyError> {
@@ -344,11 +290,11 @@ impl Tablebase {
         };
 
         Ok(PositionInfo {
-            checkmate: pos.is_checkmate(),
-            stalemate: pos.is_stalemate(),
+            checkmate: pos.borrow().is_checkmate(),
+            stalemate: pos.borrow().is_stalemate(),
             variant_win,
             variant_loss,
-            insufficient_material: pos.is_insufficient_material(),
+            insufficient_material: pos.borrow().is_insufficient_material(),
             dtz,
             wdl,
         })
@@ -373,14 +319,14 @@ impl Handler<VariantPosition> for Tablebase {
         }
 
         let mut moves = MoveList::new();
-        pos.legal_moves(&mut moves);
+        pos.borrow().legal_moves(&mut moves);
         moves.sort_by_key(|m| Reverse(m.promotion()));
 
         let mut move_info = ArrayVec::new();
 
         for m in moves {
             let mut after = pos.clone();
-            after.play_unchecked(&m);
+            after.borrow_mut().play_unchecked(&m);
 
             move_info.push(MoveInfo {
                 uci: pos.uci(&m).to_string(),
