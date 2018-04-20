@@ -350,7 +350,7 @@ impl Message for VariantPosition {
     type Result = Result<TablebaseResponse, SyzygyError>;
 }
 
-fn api_v1(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+fn api(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error>> {
     let fen = if let Some(fen) = req.query().get("fen") {
         fen
     } else {
@@ -380,7 +380,10 @@ fn api_v1(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Er
         .from_err()
         .map(|res| match res {
             Ok(res) => HttpResponse::Ok().json(res),
-            Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
+            Err(err) => {
+                error!("probe failed: {}", err.to_string());
+                HttpResponse::InternalServerError().body(err.to_string())
+            },
         })
         .responder()
 }
@@ -411,8 +414,10 @@ fn main() {
             .default_value("127.0.0.1:8080"))
         .get_matches();
 
-    ::std::env::set_var("RUST_LOG", "info");
-    let _ = env_logger::init();
+    let _ = env_logger::Builder::from_default_env()
+        .default_format_timestamp(false)
+        .init();
+
     let system = actix::System::new("lila-tablebase");
 
     let mut standard = Tablebases::<Chess>::new();
@@ -454,7 +459,7 @@ fn main() {
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
-            .resource("/{variant}", |r| r.get().f(api_v1))
+            .resource("/{variant}", |r| r.get().f(api))
     });
 
     server.threads(num_threads).bind(args.value_of("bind").unwrap()).unwrap().start();
