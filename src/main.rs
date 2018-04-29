@@ -239,8 +239,9 @@ impl Tablebase {
             });
         }
 
-        moves.sort_unstable_by_key(|m| m.dtz);
-        moves.sort_by_key(|m| (m.wdl, if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing }));
+        moves.sort_unstable_by_key(|m| {
+            (m.wdl, if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing }, m.dtz)
+        });
 
         Ok(moves.first().map(|m| (m.m.clone(), m.dtz)))
     }
