@@ -228,11 +228,14 @@ impl Tablebase {
 
         let mut moves: ArrayVec<[MoveEval; 256]> = ArrayVec::new();
         for m in legals {
+            let mut after = pos.clone();
+            after.borrow_mut().play_unchecked(&m);
+
             moves.push(MoveEval {
                 zeroing: m.is_zeroing(),
                 m,
-                wdl: self.probe_wdl(pos)?,
-                dtz: self.probe_dtz(pos)?,
+                wdl: self.probe_wdl(&after)?,
+                dtz: self.probe_dtz(&after)?,
             });
         }
 
