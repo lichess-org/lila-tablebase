@@ -239,11 +239,11 @@ impl Tablebase {
             });
         }
 
-        moves.sort_unstable_by_key(|m| {
-            (m.wdl, if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing }, m.dtz)
-        });
-
-        Ok(moves.first().map(|m| (m.m.clone(), m.dtz)))
+        Ok(moves.iter().min_by_key(|m| (
+            m.wdl,
+            if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing },
+            m.dtz,
+        )).map(|m| (m.m.clone(), m.dtz)))
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
