@@ -243,7 +243,7 @@ impl Tablebase {
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
-        let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i16;
+        let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i32;
         if halfmove_clock == 0 {
             return self.probe_wdl(pos);
         }
