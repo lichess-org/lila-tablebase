@@ -1,7 +1,6 @@
 extern crate actix;
 extern crate actix_web;
 extern crate arrayvec;
-extern crate clap;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -12,6 +11,8 @@ extern crate shakmaty;
 extern crate shakmaty_syzygy;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate structopt;
 
 use actix::dev::Request;
 use actix::{Actor, Addr, Handler, Message, Syn, SyncArbiter, SyncContext};
@@ -24,7 +25,9 @@ use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
 use shakmaty::{Move, MoveList, Outcome, Position, Role};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
+use structopt::StructOpt;
 use std::cmp::{min, Reverse};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 struct State {
@@ -392,31 +395,30 @@ fn api(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error
         .responder()
 }
 
+#[derive(StructOpt)]
+struct Opt {
+    /// Directories with tablebase files for standard chess.
+    #[structopt(long = "standard", parse(from_os_str))]
+    standard: Vec<PathBuf>,
+    /// Directories with tablebase files for atomic chess.
+    #[structopt(long = "atomic", parse(from_os_str))]
+    atomic: Vec<PathBuf>,
+    /// Directories with tablebase files for antichess.
+    #[structopt(long = "antichess", parse(from_os_str))]
+    antichess: Vec<PathBuf>,
+    /// Bind the HTTP server on this address.
+    #[structopt(long = "bind", default_value = "localhost:8080")]
+    bind: String,
+    /// Number of HTTP server threads.
+    #[structopt(long = "threads", default_value = "1")]
+    threads: usize,
+    /// Number of probing threads. A good default is the number of disks.
+    #[structopt(long = "disks", default_value = "5")]
+    disks: usize,
+}
+
 fn main() {
-    let args = clap::App::new("lila-tablebase")
-        .version("0.1.0")
-        .about("Tablebase server for lichess.org")
-        .author("Niklas Fiekas")
-        .arg(clap::Arg::with_name("standard")
-            .long("standard")
-            .takes_value(true)
-            .help("Directory with .rtbw and .rtbz files")
-            .multiple(true))
-        .arg(clap::Arg::with_name("atomic")
-            .long("atomic")
-            .takes_value(true)
-            .help("Directory with .atbw and .atbz files")
-            .multiple(true))
-        .arg(clap::Arg::with_name("antichess")
-            .long("antichess")
-            .takes_value(true)
-            .help("Directory with .gtbw, .gtbz, and pawnless .stbw and .stbz files")
-            .multiple(true))
-        .arg(clap::Arg::with_name("bind")
-            .long("bind")
-            .help("Listening address")
-            .default_value("127.0.0.1:8080"))
-        .get_matches();
+    let opt = Opt::from_args();
 
     let _ = env_logger::Builder::from_default_env()
         .default_format_timestamp(false)
@@ -428,34 +430,21 @@ fn main() {
     let mut atomic = SyzygyTablebase::<Atomic>::new();
     let mut antichess = SyzygyTablebase::<Giveaway>::new();
 
-    if let Some(paths) = args.values_of_os("standard") {
-        for path in paths {
-            standard.add_directory(path).expect("open standard directory");
-        }
+    for path in opt.standard {
+        standard.add_directory(path).expect("open standard directory");
     }
-
-    if let Some(paths) = args.values_of_os("atomic") {
-        for path in paths {
-            atomic.add_directory(path).expect("open atomic directory");
-        }
+    for path in opt.atomic {
+        atomic.add_directory(path).expect("open atomic directory");
     }
-
-    if let Some(paths) = args.values_of_os("antichess") {
-        for path in paths {
-            antichess.add_directory(path).expect("open antichess directory");
-        }
+    for path in opt.antichess {
+        antichess.add_directory(path).expect("open antichess directory");
     }
 
     let standard = Arc::new(standard);
     let atomic = Arc::new(atomic);
     let antichess = Arc::new(antichess);
 
-    // Throughput of the tablebase actor is limited by rotating disk I/O.
-    let num_disks = 5;
-    // Throughput should not be limited by the HTTP server itself.
-    let num_threads = 1;
-
-    let tablebase = TablebaseStub::new(SyncArbiter::start(num_disks, move || Tablebase {
+    let tablebase = TablebaseStub::new(SyncArbiter::start(opt.disks, move || Tablebase {
         standard: standard.clone(),
         atomic: atomic.clone(),
         antichess: antichess.clone(),
@@ -466,6 +455,6 @@ fn main() {
             .resource("/{variant}", |r| r.get().f(api))
     });
 
-    server.threads(num_threads).bind(args.value_of("bind").unwrap()).unwrap().start();
+    server.threads(opt.threads).bind(opt.bind).unwrap().start();
     system.run();
 }
