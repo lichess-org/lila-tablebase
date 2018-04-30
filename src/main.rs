@@ -23,7 +23,7 @@ use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
 use shakmaty::{Move, MoveList, Outcome, Position, Role};
-use shakmaty_syzygy::{Dtz, SyzygyError, Tablebases, Wdl};
+use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::sync::Arc;
 
@@ -193,9 +193,9 @@ impl TablebaseStub {
 }
 
 struct Tablebase {
-    standard: Arc<Tablebases<Chess>>,
-    atomic: Arc<Tablebases<Atomic>>,
-    antichess: Arc<Tablebases<Giveaway>>,
+    standard: Arc<SyzygyTablebase<Chess>>,
+    atomic: Arc<SyzygyTablebase<Atomic>>,
+    antichess: Arc<SyzygyTablebase<Giveaway>>,
 }
 
 impl Tablebase {
@@ -424,9 +424,9 @@ fn main() {
 
     let system = actix::System::new("lila-tablebase");
 
-    let mut standard = Tablebases::<Chess>::new();
-    let mut atomic = Tablebases::<Atomic>::new();
-    let mut antichess = Tablebases::<Giveaway>::new();
+    let mut standard = SyzygyTablebase::<Chess>::new();
+    let mut atomic = SyzygyTablebase::<Atomic>::new();
+    let mut antichess = SyzygyTablebase::<Giveaway>::new();
 
     if let Some(paths) = args.values_of_os("standard") {
         for path in paths {
