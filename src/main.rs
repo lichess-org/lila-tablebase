@@ -407,7 +407,7 @@ struct Opt {
     #[structopt(long = "antichess", parse(from_os_str))]
     antichess: Vec<PathBuf>,
     /// Bind the HTTP server on this address.
-    #[structopt(long = "bind", default_value = "localhost:8080")]
+    #[structopt(long = "bind", default_value = "127.0.0.1:8080")]
     bind: String,
     /// Number of HTTP server threads.
     #[structopt(long = "threads", default_value = "1")]
