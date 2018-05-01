@@ -8,8 +8,8 @@ Usage
 
 ```
 lila-tablebase 0.1.0
-Niklas Fiekas
-Tablebase server for lichess.org
+Niklas Fiekas <niklas.fiekas@backscattering.de>
+A Syzygy tablebase server
 
 USAGE:
     lila-tablebase [OPTIONS]
@@ -19,10 +19,12 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-        --antichess <antichess>...    Directory with .gtbw, .gtbz, and pawnless .stbw and .stbz files
-        --atomic <atomic>...          Directory with .atbw and .atbz files
-        --standard <standard>...      Directory with .rtbw and .rtbz files
-        --bind <bind>                 Listening address [default: 127.0.0.1:8080]
+        --standard <standard>...      Directory with tablebase files for standard chess.
+        --antichess <antichess>...    Directory with tablebase files for antichess.
+        --atomic <atomic>...          Directory with tablebase files for atomic chess.
+        --bind <bind>                 Bind the HTTP server on this address. [default: 127.0.0.1:8080]
+        --disks <disks>               Number of probing threads. A good default is the number of disks. [default: 5]
+        --threads <threads>           Number of HTTP server threads. [default: 1]
 ```
 
 HTTP API

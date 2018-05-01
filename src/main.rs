@@ -397,13 +397,13 @@ fn api(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error
 
 #[derive(StructOpt)]
 struct Opt {
-    /// Directories with tablebase files for standard chess.
+    /// Directory with tablebase files for standard chess.
     #[structopt(long = "standard", parse(from_os_str))]
     standard: Vec<PathBuf>,
-    /// Directories with tablebase files for atomic chess.
+    /// Directory with tablebase files for atomic chess.
     #[structopt(long = "atomic", parse(from_os_str))]
     atomic: Vec<PathBuf>,
-    /// Directories with tablebase files for antichess.
+    /// Directory with tablebase files for antichess.
     #[structopt(long = "antichess", parse(from_os_str))]
     antichess: Vec<PathBuf>,
     /// Bind the HTTP server on this address.
