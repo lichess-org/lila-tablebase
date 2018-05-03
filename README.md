@@ -45,16 +45,17 @@ name | type | default | description
 {
     "wdl": 0, // 2 win, 1 cursed win, 0 draw, -1 blessed loss, -2 loss, null unknown
     "dtz": 0, // distance to zeroing or null if unknown
+    "dtm": 0, // depth to mate or null if unknown
     "checkmate": false,
     "stalemate": false,
     "variant_win": false, // only useful in chess variants (atomic, antichess)
     "variant_loss": false, // only useful in chess variants
     "insufficient_material": false,
     "moves": [
-        { "uci": "h8g7", "san": "Kg7", "wdl": 0, "dtz": 0, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win":false, "variant_loss":false, "insufficient_material":false },
-        { "uci": "h8h7", "san": "Kh7", "wdl": 2, "dtz": 1, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
-        { "uci": "h8g8", "san": "Kg8", "wdl": 2, "dtz": 1, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
-        { "uci": "c6c7", "san": "c7", "wdl": 2, "dtz": 3, "zeroing": true, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false }
+        { "uci": "h8g7", "san": "Kg7", "wdl": 0, "dtz": 0, "dtm": 0, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win":false, "variant_loss":false, "insufficient_material":false },
+        { "uci": "c6c7", "san": "c7", "wdl": 2, "dtz": 3, "dtm": 27, "zeroing": true, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
+        { "uci": "h8h7", "san": "Kh7", "wdl": 2, "dtz": 1, "dtm": 25, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
+        { "uci": "h8g8", "san": "Kg8", "wdl": 2, "dtz": 1, "dtm": 25, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false }
     ]
 }
 ```
