@@ -96,82 +96,6 @@ struct MoveInfo {
     pos: PositionInfo,
 }
 
-impl MoveInfo {
-    fn order(&self) -> MoveOrder {
-        if self.pos.checkmate {
-            MoveOrder::Checkmate
-        } else if self.pos.variant_loss {
-            MoveOrder::VariantLoss
-        } else if self.pos.variant_win {
-            MoveOrder::VariantWin
-        } else if self.pos.stalemate {
-            MoveOrder::Stalemate
-        } else if self.pos.insufficient_material {
-            MoveOrder::InsufficientMaterial
-        } else if let (Some(wdl), Some(dtz)) = (self.pos.wdl, self.pos.dtz) {
-            if wdl == Wdl::CursedWin {
-                MoveOrder::CursedWin { dtz: Reverse(dtz) }
-            } else if wdl == Wdl::BlessedLoss {
-                MoveOrder::BlessedLoss { dtz: Reverse(dtz) }
-            } else if self.zeroing {
-                if wdl == Wdl::Win {
-                    MoveOrder::WinningZeroing {
-                        capture: self.capture.map(Reverse),
-                        dtz: Reverse(dtz),
-                    }
-                } else if wdl == Wdl::Loss {
-                    MoveOrder::LosingZeroing {
-                        capture: Reverse(self.capture),
-                        dtz: Reverse(dtz),
-                    }
-                } else {
-                    MoveOrder::ZeroingDraw
-                }
-            } else if wdl == Wdl::Win {
-                MoveOrder::Winning { dtz: Reverse(dtz) }
-            } else if wdl == Wdl::Loss {
-                MoveOrder::Losing { dtz: Reverse(dtz) }
-            } else {
-                MoveOrder::Draw
-            }
-        } else {
-            MoveOrder::Unknown
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Ord, PartialOrd)]
-enum MoveOrder {
-    Checkmate,
-    VariantLoss,
-    LosingZeroing {
-        capture: Reverse<Option<Role>>,
-        dtz: Reverse<Dtz>,
-    },
-    Losing {
-        dtz: Reverse<Dtz>,
-    },
-    Unknown,
-    BlessedLoss {
-        dtz: Reverse<Dtz>,
-    },
-    Stalemate,
-    InsufficientMaterial,
-    ZeroingDraw,
-    Draw,
-    CursedWin {
-        dtz: Reverse<Dtz>,
-    },
-    Winning {
-        dtz: Reverse<Dtz>,
-    },
-    WinningZeroing {
-        capture: Option<Reverse<Role>>,
-        dtz: Reverse<Dtz>,
-    },
-    VariantWin,
-}
-
 #[derive(Serialize)]
 struct PositionInfo {
     checkmate: bool,
@@ -415,7 +339,20 @@ impl Handler<VariantPosition> for Tablebase {
             });
         }
 
-        move_info.sort_by_key(|m: &MoveInfo| m.order());
+        move_info.sort_by_key(|m: &MoveInfo| (
+            Reverse(m.pos.checkmate),
+            Reverse(m.pos.variant_loss),
+            m.pos.variant_win,
+            Reverse(m.pos.wdl == Some(Wdl::Loss)),
+            m.pos.wdl,
+            Reverse(m.pos.stalemate),
+            Reverse(m.pos.insufficient_material),
+            m.pos.dtm,
+            m.capture.is_some() ^ (m.pos.wdl.unwrap_or(Wdl::Draw) >= Wdl::Draw),
+            m.zeroing ^ (m.pos.wdl.unwrap_or(Wdl::Draw) >= Wdl::Draw),
+            Reverse(m.capture),
+            m.pos.dtz,
+        ));
 
         Ok(TablebaseResponse {
             pos: self.position_info(&pos)?,
