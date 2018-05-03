@@ -165,7 +165,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let result = gaviota_sys::tb_probe_hard(
         pos.turn().fold(gaviota_sys::TB_sides::tb_WHITE_TO_MOVE, gaviota_sys::TB_sides::tb_BLACK_TO_MOVE) as c_uint,
         pos.ep_square().map_or(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint, c_uint::from),
-        0,
+        gaviota_sys::TB_castling::tb_NOCASTLE.0,
         ws.as_ptr(),
         bs.as_ptr(),
         wp.as_ptr(),
