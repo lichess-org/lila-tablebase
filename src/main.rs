@@ -347,7 +347,7 @@ impl Handler<VariantPosition> for Tablebase {
             m.pos.wdl,
             Reverse(m.pos.stalemate),
             Reverse(m.pos.insufficient_material),
-            m.pos.dtm.map(Reverse),
+            Reverse(m.pos.dtm),
             m.zeroing ^ (m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw),
             m.capture.is_some() ^ (m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw),
             Reverse(m.capture),
