@@ -92,6 +92,8 @@ struct MoveInfo {
     zeroing: bool,
     #[serde(skip)]
     capture: Option<Role>,
+    #[serde(skip)]
+    promotion: Option<Role>,
     #[serde(flatten)]
     pos: PositionInfo,
 }
@@ -335,23 +337,20 @@ impl Handler<VariantPosition> for Tablebase {
                 san: pos.clone().san_plus(&m).to_string(),
                 pos: self.position_info(&after)?,
                 capture: m.capture(),
+                promotion: m.promotion(),
                 zeroing: m.is_zeroing(),
             });
         }
 
         move_info.sort_by_key(|m: &MoveInfo| (
-            Reverse(m.pos.checkmate),
-            Reverse(m.pos.variant_loss),
-            m.pos.variant_win,
-            Reverse(m.pos.wdl == Some(Wdl::Loss)),
-            m.pos.wdl,
-            Reverse(m.pos.stalemate),
-            Reverse(m.pos.insufficient_material),
+            (Reverse(m.pos.checkmate), Reverse(m.pos.variant_loss), m.pos.variant_win),
+            (Reverse(m.pos.wdl == Some(Wdl::Loss)), m.pos.wdl),
+            (Reverse(m.pos.stalemate), Reverse(m.pos.insufficient_material)),
             Reverse(m.pos.dtm),
             m.zeroing ^ (m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw),
             m.capture.is_some() ^ (m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw),
-            Reverse(m.capture),
             m.pos.dtz.map(Reverse),
+            (Reverse(m.capture), Reverse(m.promotion)),
         ));
 
         Ok(TablebaseResponse {
