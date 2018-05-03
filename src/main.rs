@@ -478,6 +478,7 @@ struct Opt {
     #[structopt(long = "antichess", parse(from_os_str))]
     antichess: Vec<PathBuf>,
     /// Directory with Gaviota tablebase files.
+    #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
     /// Bind the HTTP server on this address.
     #[structopt(long = "bind", default_value = "127.0.0.1:8080")]
@@ -526,12 +527,13 @@ fn main() {
     unsafe {
         assert!(gaviota_sys::tbcache_init(1014 * 1024, 50) != 0);
         let mut paths = gaviota_sys::tbpaths_init();
+        assert!(!paths.is_null());
         for path in opt.gaviota {
             let path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
             paths = gaviota_sys::tbpaths_add(paths, path.as_ptr());
             assert!(!paths.is_null());
         }
-        assert!(!gaviota_sys::tb_init(0, gaviota_sys::TB_compression_scheme::tb_CP4 as c_int, paths).is_null());
+        assert!(!gaviota_sys::tb_init(1, gaviota_sys::TB_compression_scheme::tb_CP4 as c_int, paths).is_null());
     }
 
     let server = server::new(move || {
