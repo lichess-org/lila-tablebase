@@ -2,6 +2,7 @@ extern crate actix;
 extern crate actix_web;
 extern crate arrayvec;
 extern crate gaviota_sys;
+extern crate itertools;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -221,23 +222,21 @@ impl Tablebase {
         let mut legals = MoveList::new();
         pos.borrow().legal_moves(&mut legals);
 
-        let moves = legals.iter().map(|m| {
+        itertools::process_results(legals.into_iter().map(|m| {
             let mut after = pos.clone();
             after.borrow_mut().play_unchecked(&m);
 
             Ok(MoveEval {
                 zeroing: m.is_zeroing(),
-                m: m.clone(),
+                m,
                 wdl: self.probe_wdl(&after)?,
                 dtz: self.probe_dtz(&after)?,
             })
-        }).collect::<Result<ArrayVec<[_; 256]>, SyzygyError>>()?;
-
-        Ok(moves.iter().min_by_key(|m| (
+        }), |iter| iter.min_by_key(|m| (
             m.wdl,
             if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing },
             m.dtz,
-        )).map(|m| (m.m.clone(), m.dtz)))
+        )).map(|m| (m.m, m.dtz)))
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
