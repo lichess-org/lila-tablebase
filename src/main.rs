@@ -221,18 +221,17 @@ impl Tablebase {
         let mut legals = MoveList::new();
         pos.borrow().legal_moves(&mut legals);
 
-        let mut moves: ArrayVec<[MoveEval; 256]> = ArrayVec::new();
-        for m in legals {
+        let moves = legals.iter().map(|m| {
             let mut after = pos.clone();
             after.borrow_mut().play_unchecked(&m);
 
-            moves.push(MoveEval {
+            Ok(MoveEval {
                 zeroing: m.is_zeroing(),
-                m,
+                m: m.clone(),
                 wdl: self.probe_wdl(&after)?,
                 dtz: self.probe_dtz(&after)?,
-            });
-        }
+            })
+        }).collect::<Result<ArrayVec<[_; 256]>, SyzygyError>>()?;
 
         Ok(moves.iter().min_by_key(|m| (
             m.wdl,
@@ -320,23 +319,20 @@ impl Handler<VariantPosition> for Tablebase {
 
         let mut moves = MoveList::new();
         pos.borrow().legal_moves(&mut moves);
-        moves.sort_by_key(|m| Reverse(m.promotion()));
 
-        let mut move_info = ArrayVec::new();
-
-        for m in moves {
+        let mut move_info = moves.iter().map(|m| {
             let mut after = pos.clone();
-            after.borrow_mut().play_unchecked(&m);
+            after.borrow_mut().play_unchecked(m);
 
-            move_info.push(MoveInfo {
-                uci: pos.uci(&m).to_string(),
-                san: pos.clone().san_plus(&m).to_string(),
+            Ok(MoveInfo {
+                uci: pos.uci(m).to_string(),
+                san: pos.clone().san_plus(m).to_string(),
                 pos: self.position_info(&after)?,
                 capture: m.capture(),
                 promotion: m.promotion(),
                 zeroing: m.is_zeroing(),
-            });
-        }
+            })
+        }).collect::<Result<ArrayVec<[_; 256]>, SyzygyError>>()?;
 
         move_info.sort_by_key(|m: &MoveInfo| (
             (Reverse(m.pos.checkmate), Reverse(m.pos.variant_loss), m.pos.variant_win),
