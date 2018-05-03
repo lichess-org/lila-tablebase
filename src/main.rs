@@ -200,7 +200,7 @@ impl TablebaseStub {
 }
 
 unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
-    let pos = match pos {
+    let pos = match *pos {
         VariantPosition::Standard(ref pos) => pos,
         _ => return None,
     };
