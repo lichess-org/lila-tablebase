@@ -1,6 +1,7 @@
 extern crate actix;
 extern crate actix_web;
 extern crate arrayvec;
+extern crate gaviota_sys;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -23,12 +24,14 @@ use shakmaty::fen::{Fen, FenOpts};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
-use shakmaty::{Move, MoveList, Outcome, Position, Role};
+use shakmaty::{Move, MoveList, Outcome, Position, Setup, Role};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use structopt::StructOpt;
 use std::cmp::{min, Reverse};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::ffi::CString;
+use std::os::raw::{c_int, c_uchar, c_uint};
 
 struct State {
     tablebase: TablebaseStub,
@@ -178,6 +181,7 @@ struct PositionInfo {
     insufficient_material: bool,
     wdl: Option<Wdl>,
     dtz: Option<Dtz>,
+    dtm: Option<i32>,
 }
 
 #[derive(Clone)]
@@ -192,6 +196,72 @@ impl TablebaseStub {
 
     fn query(&self, pos: VariantPosition) -> Request<Syn, Tablebase, VariantPosition> {
         self.addr.send(pos)
+    }
+}
+
+unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
+    let pos = match pos {
+        VariantPosition::Standard(ref pos) => pos,
+        _ => return None,
+    };
+
+    if pos.board().occupied().count() > 5 || pos.castling_rights().any() {
+        return None;
+    }
+
+    if gaviota_sys::tb_is_initialized() == 0 {
+        return None;
+    }
+
+    let mut ws = ArrayVec::<[c_uint; 6]>::new();
+    let mut bs = ArrayVec::<[c_uint; 6]>::new();
+    let mut wp = ArrayVec::<[c_uchar; 6]>::new();
+    let mut bp = ArrayVec::<[c_uchar; 6]>::new();
+
+    for (sq, piece) in pos.board().pieces() {
+        if piece.color.is_white() {
+            ws.push(c_uint::from(sq));
+            wp.push(piece.role as c_uchar + 1);
+        } else {
+            bs.push(c_uint::from(sq));
+            bp.push(piece.role as c_uchar + 1);
+        }
+    }
+
+    ws.push(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint);
+    bs.push(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint);
+    wp.push(gaviota_sys::TB_pieces::tb_NOPIECE as c_uchar);
+    bp.push(gaviota_sys::TB_pieces::tb_NOPIECE as c_uchar);
+
+    let mut info: c_uint = 0;
+    let mut plies: c_uint = 0;
+
+    let result = gaviota_sys::tb_probe_hard(
+        pos.turn().fold(gaviota_sys::TB_sides::tb_WHITE_TO_MOVE, gaviota_sys::TB_sides::tb_BLACK_TO_MOVE) as c_uint,
+        pos.ep_square().map_or(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint, c_uint::from),
+        0,
+        ws.as_ptr(),
+        bs.as_ptr(),
+        wp.as_ptr(),
+        bp.as_ptr(),
+        &mut info as *mut c_uint,
+        &mut plies as *mut c_uint);
+
+    let plies = plies as i32;
+
+    if result == 0 {
+        warn!("gaviota_sys::tb_probe_hard() returned {}", result);
+        return None;
+    }
+
+    match gaviota_sys::TB_return_values(info) {
+        gaviota_sys::TB_return_values::tb_DRAW => Some(0),
+        gaviota_sys::TB_return_values::tb_WMATE => Some(pos.turn().fold(plies, -plies)),
+        gaviota_sys::TB_return_values::tb_BMATE => Some(pos.turn().fold(-plies, plies)),
+        _ => {
+            warn!("gaviota probe failed with info {}", info);
+            None
+        }
     }
 }
 
@@ -304,6 +374,7 @@ impl Tablebase {
             insufficient_material: pos.borrow().is_insufficient_material(),
             dtz,
             wdl,
+            dtm: unsafe { probe_dtm(pos) },
         })
     }
 }
@@ -406,6 +477,8 @@ struct Opt {
     /// Directory with tablebase files for antichess.
     #[structopt(long = "antichess", parse(from_os_str))]
     antichess: Vec<PathBuf>,
+    /// Directory with Gaviota tablebase files.
+    gaviota: Vec<PathBuf>,
     /// Bind the HTTP server on this address.
     #[structopt(long = "bind", default_value = "127.0.0.1:8080")]
     bind: String,
@@ -449,6 +522,17 @@ fn main() {
         atomic: atomic.clone(),
         antichess: antichess.clone(),
     }));
+
+    unsafe {
+        assert!(gaviota_sys::tbcache_init(1014 * 1024, 50) != 0);
+        let mut paths = gaviota_sys::tbpaths_init();
+        for path in opt.gaviota {
+            let path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
+            paths = gaviota_sys::tbpaths_add(paths, path.as_ptr());
+            assert!(!paths.is_null());
+        }
+        assert!(!gaviota_sys::tb_init(0, gaviota_sys::TB_compression_scheme::tb_CP4 as c_int, paths).is_null());
+    }
 
     let server = server::new(move || {
         App::with_state(State { tablebase: tablebase.clone() })
