@@ -22,6 +22,7 @@ OPTIONS:
         --standard <standard>...      Directory with tablebase files for standard chess.
         --antichess <antichess>...    Directory with tablebase files for antichess.
         --atomic <atomic>...          Directory with tablebase files for atomic chess.
+        --gaviota <gaviota>...        Directory with Gaviota tablebase files.
         --bind <bind>                 Bind the HTTP server on this address. [default: 127.0.0.1:8080]
         --disks <disks>               Number of probing threads. A good default is the number of disks. [default: 5]
         --threads <threads>           Number of HTTP server threads. [default: 1]
