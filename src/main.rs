@@ -175,17 +175,13 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
 
     let plies = plies as i32;
 
-    if result == 0 {
-        warn!("gaviota_sys::tb_probe_hard() returned {}", result);
-        return None;
-    }
-
     match gaviota_sys::TB_return_values(info) {
-        gaviota_sys::TB_return_values::tb_DRAW => Some(0),
-        gaviota_sys::TB_return_values::tb_WMATE => Some(pos.turn().fold(plies, -plies)),
-        gaviota_sys::TB_return_values::tb_BMATE => Some(pos.turn().fold(-plies, plies)),
+        gaviota_sys::TB_return_values::tb_DRAW if result != 0 => Some(0),
+        gaviota_sys::TB_return_values::tb_WMATE if result != 0 => Some(pos.turn().fold(plies, -plies)),
+        gaviota_sys::TB_return_values::tb_BMATE if result != 0 => Some(pos.turn().fold(-plies, plies)),
+        gaviota_sys::TB_return_values::tb_FORBID => None,
         _ => {
-            warn!("gaviota probe failed with info {}", info);
+            warn!("gaviota probe failed with result {} and info {}", result, info);
             None
         }
     }
