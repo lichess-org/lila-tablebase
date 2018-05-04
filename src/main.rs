@@ -195,14 +195,6 @@ struct Tablebase {
 }
 
 impl Tablebase {
-    fn probe_wdl(&self, pos: &VariantPosition) -> Result<Wdl, SyzygyError> {
-        match *pos {
-            VariantPosition::Standard(ref pos) => self.standard.probe_wdl(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.probe_wdl(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.probe_wdl(pos),
-        }
-    }
-
     fn probe_dtz(&self, pos: &VariantPosition) -> Result<Dtz, SyzygyError> {
         match *pos {
             VariantPosition::Standard(ref pos) => self.standard.probe_dtz(pos),
@@ -238,17 +230,14 @@ impl Tablebase {
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
-        let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i32;
-        if halfmove_clock == 0 {
-            return self.probe_wdl(pos);
-        }
-
         if let Some(ref outcome) = pos.borrow().outcome() {
             return Ok(Wdl::from_outcome(outcome, pos.borrow().turn()));
         }
 
+        let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i32;
+
         let dtz = dtz.add_plies(halfmove_clock);
-        if dtz.0.abs() != 100 {
+        if dtz.0.abs() != 100 || halfmove_clock == 0 {
             return Ok(Wdl::from_dtz_after_zeroing(dtz));
         }
 
