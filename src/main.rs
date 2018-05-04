@@ -232,7 +232,7 @@ impl Tablebase {
             })
         }), |iter| iter.min_by_key(|m| (
             m.dtz.0.signum(),
-            if m.dtz > Dtz(0) { m.zeroing } else { !m.zeroing },
+            m.zeroing ^ (m.dtz < Dtz(0)),
             Reverse(m.dtz),
         )).map(|m| (m.m, m.dtz)))
     }
