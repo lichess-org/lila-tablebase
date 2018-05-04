@@ -215,7 +215,6 @@ impl Tablebase {
         struct MoveEval {
             m: Move,
             zeroing: bool,
-            wdl: Wdl,
             dtz: Dtz,
         }
 
@@ -229,13 +228,12 @@ impl Tablebase {
             Ok(MoveEval {
                 zeroing: m.is_zeroing(),
                 m,
-                wdl: self.probe_wdl(&after)?,
                 dtz: self.probe_dtz(&after)?,
             })
         }), |iter| iter.min_by_key(|m| (
-            m.wdl,
-            if m.wdl > Wdl::Draw { m.zeroing } else { !m.zeroing },
-            m.dtz,
+            m.dtz.0.signum(),
+            if m.dtz > Dtz(0) { m.zeroing } else { !m.zeroing },
+            Reverse(m.dtz),
         )).map(|m| (m.m, m.dtz)))
     }
 
