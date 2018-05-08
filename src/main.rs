@@ -46,8 +46,7 @@ impl<'de> Deserialize<'de> for Variant {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Ok(match s.as_str() {
+        Ok(match String::deserialize(deserializer)?.as_str() {
             "standard" => Variant::Standard,
             "atomic" => Variant::Atomic,
             "antichess" => Variant::Antichess,
