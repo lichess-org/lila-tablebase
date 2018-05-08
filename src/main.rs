@@ -18,9 +18,10 @@ extern crate structopt;
 
 use actix::dev::Request;
 use actix::{Actor, Addr, Handler, Message, Syn, SyncArbiter, SyncContext};
-use actix_web::{server, App, AsyncResponder, Error, HttpRequest, HttpResponse, Result};
+use actix_web::{server, App, State, Query, Path, AsyncResponder, Error, HttpResponse, Result};
 use arrayvec::ArrayVec;
 use futures::future::{ok, Future};
+use serde::{Deserialize, Deserializer};
 use shakmaty::fen::{Fen, FenOpts};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
@@ -34,8 +35,25 @@ use std::sync::Arc;
 use std::ffi::CString;
 use std::os::raw::{c_int, c_uchar, c_uint};
 
-struct State {
-    tablebase: TablebaseStub,
+enum Variant {
+    Standard,
+    Atomic,
+    Antichess,
+}
+
+impl<'de> Deserialize<'de> for Variant {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "standard" => Variant::Standard,
+            "atomic" => Variant::Atomic,
+            "antichess" => Variant::Antichess,
+            _ => return Err(serde::de::Error::custom("variant not found")),
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -343,24 +361,22 @@ impl Message for VariantPosition {
     type Result = Result<TablebaseResponse, SyzygyError>;
 }
 
-fn api(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let fen = if let Some(fen) = req.query().get("fen") {
-        fen
-    } else {
-        return Box::new(ok(HttpResponse::BadRequest().body("fen missing")));
-    };
+#[derive(Deserialize)]
+struct QueryString {
+    fen: String,
+}
 
-    let fen = if let Ok(fen) = fen.parse::<Fen>() {
+fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryString>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+    let fen = if let Ok(fen) = query.fen.parse::<Fen>() {
         fen
     } else {
         return Box::new(ok(HttpResponse::BadRequest().body("fen invalid")));
     };
 
-    let pos = match req.match_info().get("variant") {
-        Some("standard") => fen.position().map(VariantPosition::Standard),
-        Some("atomic") => fen.position().map(VariantPosition::Atomic),
-        Some("antichess") => fen.position().map(VariantPosition::Antichess),
-        _ => return Box::new(ok(HttpResponse::NotFound().body("variant not found"))),
+    let pos = match path.into_inner() {
+        Variant::Standard => fen.position().map(VariantPosition::Standard),
+        Variant::Atomic => fen.position().map(VariantPosition::Atomic),
+        Variant::Antichess => fen.position().map(VariantPosition::Antichess),
     };
 
     let pos = if let Ok(pos) = pos {
@@ -369,7 +385,7 @@ fn api(req: HttpRequest<State>) -> Box<Future<Item = HttpResponse, Error = Error
         return Box::new(ok(HttpResponse::BadRequest().body("fen illegal")));
     };
 
-    req.state().tablebase.query(pos)
+    tablebase.query(pos)
         .from_err()
         .map(|res| match res {
             Ok(res) => HttpResponse::Ok().json(res),
@@ -454,10 +470,10 @@ fn main() {
     }
 
     let server = server::new(move || {
-        App::with_state(State { tablebase: tablebase.clone() })
-            .resource("/{variant}", |r| r.get().f(api))
+        App::with_state(tablebase.clone())
+            .resource("/{variant}", |r| r.get().with3(api))
     });
 
-    server.threads(opt.threads).bind(opt.bind).unwrap().start();
+    server.workers(opt.threads).bind(opt.bind).unwrap().start();
     system.run();
 }

@@ -13,7 +13,7 @@ keywords = ["chess", "syzygy", "tablebase"]
 
 [dependencies]
 shakmaty = "0.7"
-actix-web = "0.5"
+actix-web = "0.6"
 actix = "0.5"
 env_logger = "0.5"
 futures = "0.1"
