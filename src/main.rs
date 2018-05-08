@@ -132,7 +132,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
         _ => return None,
     };
 
-    if pos.board().occupied().count() > 5 || pos.castling_rights().any() {
+    if pos.board().occupied().count() > 5 || pos.castles().any() {
         return None;
     }
 
