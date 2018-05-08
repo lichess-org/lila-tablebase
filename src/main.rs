@@ -424,7 +424,7 @@ struct Opt {
 fn main() {
     let opt = Opt::from_args();
 
-    let _ = env_logger::Builder::from_default_env()
+    env_logger::Builder::from_default_env()
         .default_format_timestamp(false)
         .init();
 
