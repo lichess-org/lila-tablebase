@@ -13,7 +13,6 @@ keywords = ["chess", "syzygy", "tablebase"]
 
 [dependencies]
 shakmaty = "0.7"
-actix-web = "0.6"
 actix = "0.5"
 env_logger = "0.5"
 futures = "0.1"
@@ -24,6 +23,11 @@ log = "0.4"
 structopt = "0.2"
 gaviota-sys = "0.1"
 itertools = "0.7"
+
+[dependencies.actix-web]
+version = "0.6"
+default-features = false
+features = ["brotli", "flate2-c"]
 
 [dependencies.shakmaty-syzygy]
 version = "0.4"
