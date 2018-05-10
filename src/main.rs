@@ -366,7 +366,7 @@ struct QueryString {
 }
 
 fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryString>) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let fen = if let Ok(fen) = query.fen.parse::<Fen>() {
+    let fen = if let Ok(fen) = str::replace(&query.fen, '_', " ").parse::<Fen>() {
         fen
     } else {
         return Box::new(ok(HttpResponse::BadRequest().body("fen invalid")));
