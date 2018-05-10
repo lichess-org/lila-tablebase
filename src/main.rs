@@ -96,6 +96,10 @@ impl VariantPosition {
     }
 }
 
+impl Message for VariantPosition {
+    type Result = Result<TablebaseResponse, SyzygyError>;
+}
+
 #[derive(Serialize)]
 struct TablebaseResponse {
     #[serde(flatten)]
@@ -354,10 +358,6 @@ impl Handler<VariantPosition> for Tablebase {
             moves: move_info,
         })
     }
-}
-
-impl Message for VariantPosition {
-    type Result = Result<TablebaseResponse, SyzygyError>;
 }
 
 #[derive(Deserialize)]
