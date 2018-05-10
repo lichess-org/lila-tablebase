@@ -422,6 +422,7 @@ struct Opt {
 }
 
 fn main() {
+    // Parse arguments.
     let opt = Opt::from_args();
     if opt.standard.is_empty() && opt.atomic.is_empty() && opt.antichess.is_empty() && opt.gaviota.is_empty() {
         Opt::clap().print_help().expect("usage");
@@ -429,14 +430,15 @@ fn main() {
         return;
     }
 
+    // Setup logging.
     let env = env_logger::Env::default()
         .filter_or(env_logger::DEFAULT_FILTER_ENV, "lila_tablebase=info,actix_web=info");
     env_logger::Builder::from_env(env)
         .default_format_timestamp(false)
         .init();
 
-    let system = actix::System::new("lila-tablebase");
 
+    // Initialize Syzygy tablebases.
     let mut standard = SyzygyTablebase::<Chess>::new();
     let mut atomic = SyzygyTablebase::<Atomic>::new();
     let mut antichess = SyzygyTablebase::<Giveaway>::new();
@@ -455,12 +457,7 @@ fn main() {
     let atomic = Arc::new(atomic);
     let antichess = Arc::new(antichess);
 
-    let tablebase = TablebaseStub::new(SyncArbiter::start(opt.disks, move || Tablebase {
-        standard: standard.clone(),
-        atomic: atomic.clone(),
-        antichess: antichess.clone(),
-    }));
-
+    // Initialize Gaviota tablebase.
     if !opt.gaviota.is_empty() {
         unsafe {
             assert!(gaviota_sys::tbcache_init(1014 * 1024, 50) != 0);
@@ -474,6 +471,15 @@ fn main() {
             assert!(!gaviota_sys::tb_init(1, gaviota_sys::TB_compression_scheme::tb_CP4 as c_int, paths).is_null());
         }
     }
+
+    // Start server.
+    let system = actix::System::new("lila-tablebase");
+
+    let tablebase = TablebaseStub::new(SyncArbiter::start(opt.disks, move || Tablebase {
+        standard: standard.clone(),
+        atomic: atomic.clone(),
+        antichess: antichess.clone(),
+    }));
 
     let server = server::new(move || {
         App::with_state(tablebase.clone())
