@@ -422,13 +422,19 @@ struct Opt {
 }
 
 fn main() {
+    let opt = Opt::from_args();
+    if opt.standard.is_empty() && opt.atomic.is_empty() && opt.antichess.is_empty() && opt.gaviota.is_empty() {
+        Opt::clap().print_help().expect("usage");
+        println!();
+        return;
+    }
+
     let env = env_logger::Env::default()
         .filter_or(env_logger::DEFAULT_FILTER_ENV, "lila_tablebase=info,actix_web=info");
     env_logger::Builder::from_env(env)
         .default_format_timestamp(false)
         .init();
 
-    let opt = Opt::from_args();
     let system = actix::System::new("lila-tablebase");
 
     let mut standard = SyzygyTablebase::<Chess>::new();
