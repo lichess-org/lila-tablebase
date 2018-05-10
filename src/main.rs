@@ -18,7 +18,7 @@ extern crate structopt;
 
 use actix::dev::Request;
 use actix::{Actor, Addr, Handler, Message, Syn, SyncArbiter, SyncContext};
-use actix_web::{server, App, State, Query, Path, AsyncResponder, Error, HttpResponse, Result};
+use actix_web::{server, App, AsyncResponder, Error, HttpResponse, Path, Query, Result, State};
 use arrayvec::ArrayVec;
 use futures::future::{ok, Future};
 use serde::{Deserialize, Deserializer};
@@ -26,14 +26,14 @@ use shakmaty::fen::{Fen, FenOpts};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
-use shakmaty::{Move, MoveList, Outcome, Position, Setup, Role};
+use shakmaty::{Move, MoveList, Outcome, Position, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
-use structopt::StructOpt;
 use std::cmp::{min, Reverse};
-use std::path::PathBuf;
-use std::sync::Arc;
 use std::ffi::CString;
 use std::os::raw::{c_int, c_uchar, c_uint};
+use std::path::PathBuf;
+use std::sync::Arc;
+use structopt::StructOpt;
 
 enum Variant {
     Standard,
@@ -391,7 +391,7 @@ fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryS
             Err(err) => {
                 error!("probe failed: {}", err.to_string());
                 HttpResponse::InternalServerError().body(err.to_string())
-            },
+            }
         })
         .responder()
 }
