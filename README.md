@@ -5,6 +5,8 @@ Tablebase server for [lichess.org](https://tablebase.lichess.ovh),
 based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy)
 and [actix-web](https://actix.rs/).
 
+[![Build Status](https://travis-ci.org/niklasf/lila-tablebase.svg?branch=master)](https://travis-ci.org/niklasf/lila-tablebase)
+
 Usage
 -----
 
