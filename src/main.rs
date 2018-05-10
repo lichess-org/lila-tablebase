@@ -422,12 +422,13 @@ struct Opt {
 }
 
 fn main() {
-    let opt = Opt::from_args();
-
-    env_logger::Builder::from_default_env()
+    let env = env_logger::Env::default()
+        .filter_or(env_logger::DEFAULT_FILTER_ENV, "lila_tablebase=info,actix_web=info");
+    env_logger::Builder::from_env(env)
         .default_format_timestamp(false)
         .init();
 
+    let opt = Opt::from_args();
     let system = actix::System::new("lila-tablebase");
 
     let mut standard = SyzygyTablebase::<Chess>::new();
