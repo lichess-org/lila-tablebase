@@ -437,7 +437,6 @@ fn main() {
         .default_format_timestamp(false)
         .init();
 
-
     // Initialize Syzygy tablebases.
     let mut standard = SyzygyTablebase::<Chess>::new();
     let mut atomic = SyzygyTablebase::<Atomic>::new();
