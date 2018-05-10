@@ -1,7 +1,9 @@
 lila-tablebase
 ==============
 
-Tablebase server for [lichess.org](https://tablebase.lichess.ovh).
+Tablebase server for [lichess.org](https://tablebase.lichess.ovh),
+based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy)
+and [actix-web](https://actix.rs/).
 
 Usage
 -----
