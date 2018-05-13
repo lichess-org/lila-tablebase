@@ -2,7 +2,6 @@ extern crate actix;
 extern crate actix_web;
 extern crate arrayvec;
 extern crate gaviota_sys;
-extern crate itertools;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -225,29 +224,11 @@ impl Tablebase {
     }
 
     fn best_move(&self, pos: &VariantPosition) -> Result<Option<(Move, Dtz)>, SyzygyError> {
-        struct MoveEval {
-            m: Move,
-            zeroing: bool,
-            dtz: Dtz,
+        match *pos {
+            VariantPosition::Standard(ref pos) => self.standard.best_move(pos),
+            VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos),
+            VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos),
         }
-
-        let mut legals = MoveList::new();
-        pos.borrow().legal_moves(&mut legals);
-
-        itertools::process_results(legals.into_iter().map(|m| {
-            let mut after = pos.clone();
-            after.borrow_mut().play_unchecked(&m);
-
-            Ok(MoveEval {
-                zeroing: m.is_zeroing(),
-                m,
-                dtz: self.probe_dtz(&after)?,
-            })
-        }), |iter| iter.min_by_key(|m| (
-            m.dtz.0.signum(),
-            m.zeroing ^ (m.dtz < Dtz(0)),
-            Reverse(m.dtz),
-        )).map(|m| (m.m, m.dtz)))
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {

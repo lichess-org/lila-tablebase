@@ -22,7 +22,6 @@ serde_json = "1.0"
 log = "0.4"
 structopt = "0.2"
 gaviota-sys = "0.1"
-itertools = "0.7"
 
 [dependencies.actix-web]
 version = "0.6"
