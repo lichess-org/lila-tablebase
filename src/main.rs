@@ -20,7 +20,7 @@ use actix::{Actor, Addr, Handler, Message, Syn, SyncArbiter, SyncContext};
 use actix_web::{server, App, AsyncResponder, Error, HttpResponse, Path, Query, Result, State};
 use arrayvec::ArrayVec;
 use futures::future::{ok, Future};
-use serde::{Deserialize, Deserializer};
+use serde::de;
 use shakmaty::fen::{Fen, FenOpts};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
@@ -32,6 +32,7 @@ use std::ffi::CString;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::fmt;
 use structopt::StructOpt;
 
 enum Variant {
@@ -40,17 +41,34 @@ enum Variant {
     Antichess,
 }
 
-impl<'de> Deserialize<'de> for Variant {
+impl<'de> de::Deserialize<'de> for Variant {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
+        D: de::Deserializer<'de>,
     {
-        Ok(match String::deserialize(deserializer)?.as_str() {
-            "standard" => Variant::Standard,
-            "atomic" => Variant::Atomic,
-            "antichess" => Variant::Antichess,
-            _ => return Err(serde::de::Error::custom("variant not found")),
-        })
+        struct VariantVisitor;
+
+        impl<'de> de::Visitor<'de> for VariantVisitor {
+            type Value = Variant;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "expecting standard, atomic or giveaway")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Variant, E>
+            where
+                E: de::Error,
+            {
+                Ok(match s {
+                    "standard" => Variant::Standard,
+                    "atomic" => Variant::Atomic,
+                    "antichess" => Variant::Antichess,
+                    _ => return Err(serde::de::Error::invalid_value(de::Unexpected::Str(s), &self)),
+                })
+            }
+        }
+
+        deserializer.deserialize_str(VariantVisitor)
     }
 }
 
