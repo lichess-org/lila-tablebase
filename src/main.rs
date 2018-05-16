@@ -21,11 +21,11 @@ use actix_web::{server, App, AsyncResponder, Error, HttpResponse, Path, Query, R
 use arrayvec::ArrayVec;
 use futures::future::{ok, Future};
 use serde::de;
-use shakmaty::fen::{Fen, FenOpts};
+use shakmaty::fen::{Fen, FenOpts, FenError};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
-use shakmaty::{Move, MoveList, Outcome, Position, Role, Setup};
+use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
@@ -39,6 +39,16 @@ enum Variant {
     Standard,
     Atomic,
     Antichess,
+}
+
+impl Variant {
+    fn position(&self, fen: Fen) -> Result<VariantPosition, PositionError> {
+        match self {
+            Variant::Standard => fen.position().map(VariantPosition::Standard),
+            Variant::Atomic => fen.position().map(VariantPosition::Atomic),
+            Variant::Antichess => fen.position().map(VariantPosition::Antichess),
+        }
+    }
 }
 
 impl<'de> de::Deserialize<'de> for Variant {
@@ -364,23 +374,21 @@ struct QueryString {
     fen: String,
 }
 
+impl QueryString {
+    fn fen(&self) -> Result<Fen, FenError> {
+        str::replace(&self.fen, '_', " ").parse()
+    }
+}
+
 fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryString>) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let fen = if let Ok(fen) = str::replace(&query.fen, '_', " ").parse::<Fen>() {
-        fen
-    } else {
-        return Box::new(ok(HttpResponse::BadRequest().body("fen invalid")));
+    let fen = match query.fen() {
+        Ok(fen) => fen,
+        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen invalid"))),
     };
 
-    let pos = match path.into_inner() {
-        Variant::Standard => fen.position().map(VariantPosition::Standard),
-        Variant::Atomic => fen.position().map(VariantPosition::Atomic),
-        Variant::Antichess => fen.position().map(VariantPosition::Antichess),
-    };
-
-    let pos = if let Ok(pos) = pos {
-        pos
-    } else {
-        return Box::new(ok(HttpResponse::BadRequest().body("fen illegal")));
+    let pos = match path.into_inner().position(fen) {
+        Ok(pos) => pos,
+        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen illegal"))),
     };
 
     tablebase.query(pos)
