@@ -159,18 +159,6 @@ struct PositionInfo {
     dtm: Option<i32>,
 }
 
-struct QueryMainline(VariantPosition);
-
-impl Message for QueryMainline {
-    type Result = Result<MainlineResponse, SyzygyError>;
-}
-
-#[derive(Serialize)]
-struct MainlineResponse {
-    mainline: Vec<String>,
-    winner: Option<char>,
-}
-
 #[derive(Clone)]
 struct TablebaseStub {
     addr: Addr<Syn, Tablebase>,
@@ -183,10 +171,6 @@ impl TablebaseStub {
 
     fn query(&self, pos: VariantPosition) -> Request<Syn, Tablebase, VariantPosition> {
         self.addr.send(pos)
-    }
-
-    fn mainline(&self, pos: VariantPosition) -> Request<Syn, Tablebase, QueryMainline> {
-        self.addr.send(QueryMainline(pos))
     }
 }
 
@@ -385,32 +369,6 @@ impl Handler<VariantPosition> for Tablebase {
     }
 }
 
-impl Handler<QueryMainline> for Tablebase {
-    type Result = Result<MainlineResponse, SyzygyError>;
-
-    fn handle(&mut self, QueryMainline(mut pos): QueryMainline, _: &mut Self::Context) -> Self::Result {
-        let mut mainline = Vec::new();
-
-        while pos.borrow().halfmove_clock() < 100 {
-            if let Some((m, dtz)) = self.best_move(&pos)? {
-                if dtz == Dtz(0) {
-                    break;
-                }
-
-                mainline.push(pos.uci(&m).to_string());
-                pos.borrow_mut().play_unchecked(&m);
-            } else {
-                break;
-            }
-        }
-
-        Ok(MainlineResponse {
-            mainline,
-            winner: pos.borrow().outcome().winner().map(|winner| winner.char()),
-        })
-    }
-}
-
 #[derive(Deserialize)]
 struct QueryString {
     fen: String,
@@ -439,29 +397,6 @@ fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryS
             Ok(res) => HttpResponse::Ok().json(res),
             Err(err) => {
                 error!("probe failed: {}", err.to_string());
-                HttpResponse::InternalServerError().body(err.to_string())
-            }
-        })
-        .responder()
-}
-
-fn mainline(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryString>) -> Box<Future<Item = HttpResponse, Error = Error>> {
-    let fen = match query.fen() {
-        Ok(fen) => fen,
-        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen invalid"))),
-    };
-
-    let pos = match path.into_inner().position(fen) {
-        Ok(pos) => pos,
-        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen illegal"))),
-    };
-
-    tablebase.mainline(pos)
-        .from_err()
-        .map(|res| match res {
-            Ok(res) => HttpResponse::Ok().json(res),
-            Err(err) => {
-                error!("probing mainline failed: {}", err.to_string());
                 HttpResponse::InternalServerError().body(err.to_string())
             }
         })
@@ -555,7 +490,6 @@ fn main() {
     let server = server::new(move || {
         App::with_state(tablebase.clone())
             .resource("/{variant}", |r| r.get().with3(api))
-            .resource("/{variant}/mainline", |r| r.get().with3(mainline))
     });
 
     server.workers(opt.threads).bind(opt.bind).unwrap().start();
