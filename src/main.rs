@@ -399,7 +399,7 @@ impl Handler<QueryMainline> for Tablebase {
         let dtz = self.probe_dtz(&pos)?;
         let mut mainline = Vec::new();
 
-        if dtz == Dtz(0) {
+        if dtz != Dtz(0) {
             while pos.borrow().halfmove_clock() < 100 {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
