@@ -460,6 +460,9 @@ fn mainline(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<Q
         .from_err()
         .map(|res| match res {
             Ok(res) => HttpResponse::Ok().json(res),
+            Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
+                HttpResponse::NotFound().body("position not found in tablebase")
+            }
             Err(err) => {
                 error!("probing mainline failed: {}", err.to_string());
                 HttpResponse::InternalServerError().body(err.to_string())
