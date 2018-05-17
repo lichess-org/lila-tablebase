@@ -167,8 +167,15 @@ impl Message for QueryMainline {
 
 #[derive(Serialize)]
 struct MainlineResponse {
-    mainline: Vec<String>,
+    mainline: Vec<MainlineStep>,
     winner: Option<char>,
+    dtz: Dtz,
+}
+
+#[derive(Serialize)]
+struct MainlineStep {
+    uci: String,
+    dtz: Dtz,
 }
 
 #[derive(Clone)]
@@ -389,24 +396,28 @@ impl Handler<QueryMainline> for Tablebase {
     type Result = Result<MainlineResponse, SyzygyError>;
 
     fn handle(&mut self, QueryMainline(mut pos): QueryMainline, _: &mut Self::Context) -> Self::Result {
+        let dtz = self.probe_dtz(&pos)?;
         let mut mainline = Vec::new();
 
-        while pos.borrow().halfmove_clock() < 100 {
-            if let Some((m, dtz)) = self.best_move(&pos)? {
-                if dtz == Dtz(0) {
+        if dtz == Dtz(0) {
+            while pos.borrow().halfmove_clock() < 100 {
+                if let Some((m, dtz)) = self.best_move(&pos)? {
+                    mainline.push(MainlineStep {
+                        uci: pos.uci(&m).to_string(),
+                        dtz: dtz,
+                    });
+
+                    pos.borrow_mut().play_unchecked(&m);
+                } else {
                     break;
                 }
-
-                mainline.push(pos.uci(&m).to_string());
-                pos.borrow_mut().play_unchecked(&m);
-            } else {
-                break;
             }
         }
 
         Ok(MainlineResponse {
+            dtz,
             mainline,
-            winner: pos.borrow().outcome().winner().map(|winner| winner.char()),
+            winner: pos.borrow().outcome().and_then(|o| o.winner()).map(|winner| winner.char()),
         })
     }
 }
