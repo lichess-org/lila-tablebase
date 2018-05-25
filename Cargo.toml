@@ -30,6 +30,7 @@ features = ["brotli", "flate2-c"]
 
 [dependencies.shakmaty-syzygy]
 version = "0.4"
+git = "https://github.com/niklasf/shakmaty-syzygy.git"
 features = ["serde-1"]
 
 [dependencies.arrayvec]
