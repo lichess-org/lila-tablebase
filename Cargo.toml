@@ -12,7 +12,7 @@ categories = ["games"]
 keywords = ["chess", "syzygy", "tablebase"]
 
 [dependencies]
-shakmaty = "0.7"
+shakmaty = "0.8"
 actix = "0.5"
 env_logger = "0.5"
 futures = "0.1"
