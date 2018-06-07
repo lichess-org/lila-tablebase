@@ -38,31 +38,79 @@ HTTP API
 ### `GET /standard`
 
 ```
-curl https://tablebase.lichess.ovh/standard?fen=7K/8/k1P5/7p/8/8/8/8%20w%20-%20-%200%201
+curl http://tablebase.lichess.ovh/standard?fen=4k3/6KP/8/8/8/8/7p/8_w_-_-_0_1
 ```
 
 name | type | default | description
 --- | --- | --- | ---
-**fen** | string | *required* | FEN of the position. The halfmove clock is taken into account for WDL values.
+**fen** | string | *required* | FEN of the position. Underscores allowed. The halfmove clock is taken into account for WDL values.
 
 ```javascript
 {
-    "wdl": 0, // 2 win, 1 cursed win, 0 draw, -1 blessed loss, -2 loss, null unknown
-    "dtz": 0, // distance to zeroing or null if unknown
-    "dtm": 0, // depth to mate or null if unknown
-    "checkmate": false,
-    "stalemate": false,
-    "variant_win": false, // only useful in chess variants (atomic, antichess)
-    "variant_loss": false, // only useful in chess variants
-    "insufficient_material": false,
-    "moves": [
-        { "uci": "h8g7", "san": "Kg7", "wdl": 0, "dtz": 0, "dtm": 0, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win":false, "variant_loss":false, "insufficient_material":false },
-        { "uci": "c6c7", "san": "c7", "wdl": 2, "dtz": 3, "dtm": 27, "zeroing": true, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
-        { "uci": "h8h7", "san": "Kh7", "wdl": 2, "dtz": 1, "dtm": 25, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false },
-        { "uci": "h8g8", "san": "Kg8", "wdl": 2, "dtz": 1, "dtm": 25, "zeroing": false, "checkmate": false, "stalemate": false, "variant_win": false, "variant_loss": false, "insufficient_material": false }
-    ]
+  "wdl": 2, // (2) win, (1) cursed win, (0) draw, (-1) blessed loss, (-2) loss, (null) unknown
+  "dtz": 1, // distance to zeroing or null if unknown
+  "dtm": 17, // depth to mate or null if unknown
+  "checkmate": false,
+  "stalemate": false,
+  "variant_win": false, // only in chess variants (atomic, antichess)
+  "variant_loss": false, // only in chess variants
+  "insufficient_material": false,
+  "moves": [ // information about legal moves, best first
+    {
+      "uci": "h7h8q",
+      "san": "h8=Q+",
+      "wdl": -2,
+      "dtz": -2,
+      "dtm": -16,
+      "zeroing": true,
+      "checkmate": false,
+      "stalemate": false,
+      "variant_win": false,
+      "variant_loss": false,
+      "insufficient_material": false
+    },
+    // ...
+  ]
 }
 ```
+
+### `GET /standard/mainline`
+
+```
+curl http://tablebase.lichess.ovh/standard/mainline?fen=4k3/6KP/8/8/8/8/7p/8_w_-_-_0_1
+```
+
+name | type | default | description
+--- | --- | --- | ---
+**fen** | string | *required* | FEN of the position. Underscores allowed. The halfmove clock is taken into account.
+
+```javascript
+{
+  "dtz": 1
+  "mainline": [ // dtz mainline or empty if drawn
+    { "uci": "h7h8q", "dtz": -2 },
+    { "uci": "e8d7", "dtz": 1 },
+    { "uci": "h8h2", "dtz": -14 },
+    { "uci": "d7c6", "dtz": 13 },
+    { "uci": "h2e5", "dtz": -12 },
+    { "uci": "c6b6", "dtz": 11 },
+    { "uci": "g7f6", "dtz": -10 },
+    { "uci": "b6a6", "dtz": 9 },
+    { "uci": "e5b2", "dtz": -8 },
+    { "uci": "a6a5", "dtz": 7 },
+    { "uci": "f6e5", "dtz": -6 },
+    { "uci": "a5a4", "dtz": 5 },
+    { "uci": "e5d4", "dtz": -4 },
+    { "uci": "a4a5", "dtz": 3 },
+    { "uci": "d4c5", "dtz": -2 },
+    { "uci": "a5a4", "dtz": 1 },
+    { "uci": "b2a2", "dtz": -1 }
+  ],
+  "winner": "w", // (w) white, (b) black, (null) draw
+}
+```
+
+Error 404 if not a tablebase position or required tables not present.
 
 ### `GET /atomic`
 
