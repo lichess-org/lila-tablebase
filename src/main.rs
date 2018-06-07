@@ -217,13 +217,8 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let mut bp = ArrayVec::<[c_uchar; 6]>::new();
 
     for (sq, piece) in pos.board().pieces() {
-        if piece.color.is_white() {
-            ws.push(c_uint::from(sq));
-            wp.push(piece.role as c_uchar + 1);
-        } else {
-            bs.push(c_uint::from(sq));
-            bp.push(piece.role as c_uchar + 1);
-        }
+        piece.color.fold(&mut ws, &mut bs).push(c_uint::from(sq));
+        piece.color.fold(&mut wp, &mut bp).push(piece.role as c_uchar);
     }
 
     ws.push(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint);
