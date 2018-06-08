@@ -21,7 +21,7 @@ use actix_web::{server, App, AsyncResponder, Error, HttpResponse, Path, Query, R
 use arrayvec::ArrayVec;
 use futures::future::{ok, Future};
 use serde::de;
-use shakmaty::fen::{Fen, FenOpts, FenError};
+use shakmaty::fen::{Fen, FenError, FenOpts};
 use shakmaty::san::{san_plus, SanPlus};
 use shakmaty::uci::{uci, Uci};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
@@ -29,10 +29,10 @@ use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
+use std::fmt;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::fmt;
 use structopt::StructOpt;
 
 enum Variant {
