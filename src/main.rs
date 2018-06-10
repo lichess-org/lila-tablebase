@@ -22,8 +22,8 @@ use arrayvec::ArrayVec;
 use futures::future::{ok, Future};
 use serde::de;
 use shakmaty::fen::{Fen, FenError, FenOpts};
-use shakmaty::san::{san_plus, SanPlus};
-use shakmaty::uci::{uci, Uci};
+use shakmaty::san::SanPlus;
+use shakmaty::uci::Uci;
 use shakmaty::variants::{Atomic, Chess, Giveaway};
 use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
@@ -108,17 +108,17 @@ impl VariantPosition {
 
     fn uci(&self, m: &Move) -> Uci {
         match *self {
-            VariantPosition::Standard(ref pos) => uci(pos, m),
-            VariantPosition::Atomic(ref pos) => uci(pos, m),
-            VariantPosition::Antichess(ref pos) => uci(pos, m),
+            VariantPosition::Standard(ref pos) => Uci::from_move(pos, m),
+            VariantPosition::Atomic(ref pos) => Uci::from_move(pos, m),
+            VariantPosition::Antichess(ref pos) => Uci::from_move(pos, m),
         }
     }
 
     fn san_plus(self, m: &Move) -> SanPlus {
         match self {
-            VariantPosition::Standard(pos) => san_plus(pos, m),
-            VariantPosition::Atomic(pos) => san_plus(pos, m),
-            VariantPosition::Antichess(pos) => san_plus(pos, m),
+            VariantPosition::Standard(pos) => SanPlus::from_move(pos, m),
+            VariantPosition::Atomic(pos) => SanPlus::from_move(pos, m),
+            VariantPosition::Antichess(pos) => SanPlus::from_move(pos, m),
         }
     }
 }
