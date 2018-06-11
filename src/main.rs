@@ -42,7 +42,7 @@ enum Variant {
 }
 
 impl Variant {
-    fn position(&self, fen: Fen) -> Result<VariantPosition, PositionError> {
+    fn position(&self, fen: &Fen) -> Result<VariantPosition, PositionError> {
         match self {
             Variant::Standard => fen.position().map(VariantPosition::Standard),
             Variant::Atomic => fen.position().map(VariantPosition::Atomic),
@@ -399,7 +399,7 @@ impl Handler<QueryMainline> for Tablebase {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
                         uci: pos.uci(&m).to_string(),
-                        dtz: dtz,
+                        dtz,
                     });
 
                     pos.borrow_mut().play_unchecked(&m);
@@ -434,7 +434,7 @@ fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryS
         Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen invalid"))),
     };
 
-    let pos = match path.into_inner().position(fen) {
+    let pos = match path.into_inner().position(&fen) {
         Ok(pos) => pos,
         Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen illegal"))),
     };
@@ -457,7 +457,7 @@ fn mainline(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<Q
         Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen invalid"))),
     };
 
-    let pos = match path.into_inner().position(fen) {
+    let pos = match path.into_inner().position(&fen) {
         Ok(pos) => pos,
         Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen illegal"))),
     };
