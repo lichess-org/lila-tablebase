@@ -292,14 +292,6 @@ impl Tablebases {
     }
 
     fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
-        match pos {
-            VariantPosition::Standard(ref pos) =>
-                info!("standard fen: {}", FenOpts::default().fen(pos)),
-            VariantPosition::Atomic(ref pos) =>
-                info!("atomic fen: {}", FenOpts::default().fen(pos)),
-            VariantPosition::Antichess(ref pos) =>
-                info!("antichess fen: {}", FenOpts::default().promoted(true).fen(pos)),
-        }
 
         let mut moves = MoveList::new();
         pos.borrow().legal_moves(&mut moves);
@@ -386,9 +378,21 @@ fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) ->
         Err(_) => return Err(::rocket::http::Status::new(400, "fen illegal").into()),
     };
 
+    match pos {
+        VariantPosition::Standard(ref pos) =>
+            info!("standard: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Atomic(ref pos) =>
+            info!("atomic: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Antichess(ref pos) =>
+            info!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
+    }
+
     match tablebases.probe(&pos) {
         Ok(res) => Ok(Json(res)),
-        Err(err) => return Err(::rocket::http::Status::new(505, "probe failed").into()),
+        Err(err) => {
+            error!("probing failed: {}", err.to_string());
+            Err(::rocket::http::Status::new(505, "probe failed").into())
+        }
     }
 }
 
@@ -404,12 +408,22 @@ fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString)
         Err(_) => return Err(::rocket::http::Status::new(400, "fen illegal").into()),
     };
 
+    match pos {
+        VariantPosition::Standard(ref pos) =>
+            info!("standard mainline: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Atomic(ref pos) =>
+            info!("atomic mainline: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Antichess(ref pos) =>
+            info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
+    }
+
     match tablebases.mainline(pos) {
         Ok(res) => Ok(Json(res)),
         Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
             Err(::rocket::http::Status::new(404, "position not found in tablebase").into())
         }
         Err(err) => {
+            error!("probing mainline failed: {}", err.to_string());
             Err(::rocket::http::Status::new(505, "probing mainline failed").into())
         }
     }
