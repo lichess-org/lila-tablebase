@@ -10,10 +10,10 @@ extern crate env_logger;
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate serde;
-extern crate shakmaty;
-extern crate shakmaty_syzygy;
 #[macro_use]
 extern crate serde_derive;
+extern crate shakmaty;
+extern crate shakmaty_syzygy;
 #[macro_use]
 extern crate structopt;
 
@@ -23,13 +23,13 @@ use rocket::http::{RawStr, Status};
 use rocket::request::FromParam;
 use rocket::response::status;
 use rocket_contrib::Json;
-use std::borrow::Borrow;
 use shakmaty::fen::{Fen, FenError, FenOpts};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
 use shakmaty::variants::{Atomic, Chess, Giveaway};
 use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
+use std::borrow::Borrow;
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
 use std::os::raw::{c_int, c_uchar, c_uint};
@@ -351,7 +351,7 @@ impl Tablebases {
     }
 }
 
-#[derive(Deserialize, FromForm)]
+#[derive(FromForm)]
 struct QueryString {
     fen: String,
 }
