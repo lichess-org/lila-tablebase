@@ -1,13 +1,16 @@
-extern crate actix;
-extern crate actix_web;
+#![feature(plugin)]
+#![feature(custom_derive)]
+#![plugin(rocket_codegen)]
+
 extern crate arrayvec;
 extern crate gaviota_sys;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
-extern crate futures;
+extern crate rocket;
+extern crate rocket_contrib;
+#[macro_use]
 extern crate serde;
-extern crate serde_json;
 extern crate shakmaty;
 extern crate shakmaty_syzygy;
 #[macro_use]
@@ -15,12 +18,15 @@ extern crate serde_derive;
 #[macro_use]
 extern crate structopt;
 
-use actix::dev::Request;
-use actix::{Actor, Addr, Handler, Message, Syn, SyncArbiter, SyncContext};
-use actix_web::{server, App, AsyncResponder, Error, HttpResponse, Path, Query, Result, State};
 use arrayvec::ArrayVec;
-use futures::future::{ok, Future};
-use serde::de;
+use rocket::State;
+use rocket::http::RawStr;
+use rocket::request::FromParam;
+use rocket::response::Failure;
+use rocket::response::Responder;
+use rocket::response::status::BadRequest;
+use rocket_contrib::Json;
+use std::borrow::Borrow;
 use shakmaty::fen::{Fen, FenError, FenOpts};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
@@ -41,6 +47,19 @@ enum Variant {
     Antichess,
 }
 
+impl<'a> FromParam<'a> for Variant {
+    type Error = &'a RawStr;
+
+    fn from_param(param: &'a RawStr) -> Result<Self, Self::Error> {
+        match param.percent_decode().map_err(|_| param)?.borrow() {
+            "standard" => Ok(Variant::Standard),
+            "atomic" => Ok(Variant::Atomic),
+            "antichess" => Ok(Variant::Antichess),
+            _ => Err(param),
+        }
+    }
+}
+
 impl Variant {
     fn position(&self, fen: &Fen) -> Result<VariantPosition, PositionError> {
         match self {
@@ -48,37 +67,6 @@ impl Variant {
             Variant::Atomic => fen.position().map(VariantPosition::Atomic),
             Variant::Antichess => fen.position().map(VariantPosition::Antichess),
         }
-    }
-}
-
-impl<'de> de::Deserialize<'de> for Variant {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        struct VariantVisitor;
-
-        impl<'de> de::Visitor<'de> for VariantVisitor {
-            type Value = Variant;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "expecting standard, atomic or giveaway")
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Variant, E>
-            where
-                E: de::Error,
-            {
-                Ok(match s {
-                    "standard" => Variant::Standard,
-                    "atomic" => Variant::Atomic,
-                    "antichess" => Variant::Antichess,
-                    _ => return Err(serde::de::Error::invalid_value(de::Unexpected::Str(s), &self)),
-                })
-            }
-        }
-
-        deserializer.deserialize_str(VariantVisitor)
     }
 }
 
@@ -123,10 +111,6 @@ impl VariantPosition {
     }
 }
 
-impl Message for VariantPosition {
-    type Result = Result<TablebaseResponse, SyzygyError>;
-}
-
 #[derive(Serialize)]
 struct TablebaseResponse {
     #[serde(flatten)]
@@ -159,12 +143,6 @@ struct PositionInfo {
     dtm: Option<i32>,
 }
 
-struct QueryMainline(VariantPosition);
-
-impl Message for QueryMainline {
-    type Result = Result<MainlineResponse, SyzygyError>;
-}
-
 #[derive(Serialize)]
 struct MainlineResponse {
     mainline: Vec<MainlineStep>,
@@ -176,25 +154,6 @@ struct MainlineResponse {
 struct MainlineStep {
     uci: String,
     dtz: Dtz,
-}
-
-#[derive(Clone)]
-struct TablebaseStub {
-    addr: Addr<Syn, Tablebase>,
-}
-
-impl TablebaseStub {
-    fn new(addr: Addr<Syn, Tablebase>) -> TablebaseStub {
-        TablebaseStub { addr }
-    }
-
-    fn query(&self, pos: VariantPosition) -> Request<Syn, Tablebase, VariantPosition> {
-        self.addr.send(pos)
-    }
-
-    fn mainline(&self, pos: VariantPosition) -> Request<Syn, Tablebase, QueryMainline> {
-        self.addr.send(QueryMainline(pos))
-    }
 }
 
 unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
@@ -254,13 +213,13 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     }
 }
 
-struct Tablebase {
+struct Tablebases {
     standard: Arc<SyzygyTablebase<Chess>>,
     atomic: Arc<SyzygyTablebase<Atomic>>,
     antichess: Arc<SyzygyTablebase<Giveaway>>,
 }
 
-impl Tablebase {
+impl Tablebases {
     fn probe_dtz(&self, pos: &VariantPosition) -> Result<Dtz, SyzygyError> {
         match *pos {
             VariantPosition::Standard(ref pos) => self.standard.probe_dtz(pos),
@@ -332,16 +291,8 @@ impl Tablebase {
             dtm: unsafe { probe_dtm(pos) },
         })
     }
-}
 
-impl Actor for Tablebase {
-    type Context = SyncContext<Self>;
-}
-
-impl Handler<VariantPosition> for Tablebase {
-    type Result = Result<TablebaseResponse, SyzygyError>;
-
-    fn handle(&mut self, pos: VariantPosition, _: &mut Self::Context) -> Self::Result {
+    fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
         match pos {
             VariantPosition::Standard(ref pos) =>
                 info!("standard fen: {}", FenOpts::default().fen(pos)),
@@ -385,12 +336,8 @@ impl Handler<VariantPosition> for Tablebase {
             moves: move_info,
         })
     }
-}
 
-impl Handler<QueryMainline> for Tablebase {
-    type Result = Result<MainlineResponse, SyzygyError>;
-
-    fn handle(&mut self, QueryMainline(mut pos): QueryMainline, _: &mut Self::Context) -> Self::Result {
+    fn mainline(&self, mut pos: VariantPosition) -> Result<MainlineResponse, SyzygyError> {
         let dtz = self.probe_dtz(&pos)?;
         let mut mainline = Vec::new();
 
@@ -417,7 +364,7 @@ impl Handler<QueryMainline> for Tablebase {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, FromForm)]
 struct QueryString {
     fen: String,
 }
@@ -428,53 +375,45 @@ impl QueryString {
     }
 }
 
-fn api(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryString>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+#[get("/<variant>?<query>")]
+fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<TablebaseResponse>, Failure> {
     let fen = match query.fen() {
         Ok(fen) => fen,
-        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen invalid"))),
+        Err(_) => return Err(::rocket::http::Status::new(400, "fen invalid").into()),
     };
 
-    let pos = match path.into_inner().position(&fen) {
+    let pos = match variant.position(&fen) {
         Ok(pos) => pos,
-        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen illegal"))),
+        Err(_) => return Err(::rocket::http::Status::new(400, "fen illegal").into()),
     };
 
-    tablebase.query(pos)
-        .from_err()
-        .map(|res| match res {
-            Ok(res) => HttpResponse::Ok().json(res),
-            Err(err) => {
-                error!("probe failed: {}", err.to_string());
-                HttpResponse::InternalServerError().body(err.to_string())
-            }
-        })
-        .responder()
+    match tablebases.probe(&pos) {
+        Ok(res) => Ok(Json(res)),
+        Err(err) => return Err(::rocket::http::Status::new(505, "probe failed").into()),
+    }
 }
 
-fn mainline(tablebase: State<TablebaseStub>, path: Path<Variant>, query: Query<QueryString>) -> Box<Future<Item = HttpResponse, Error = Error>> {
+#[get("/<variant>/mainline?<query>")]
+fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<MainlineResponse>, Failure> {
     let fen = match query.fen() {
         Ok(fen) => fen,
-        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen invalid"))),
+        Err(_) => return Err(::rocket::http::Status::new(400, "fen invalid").into()),
     };
 
-    let pos = match path.into_inner().position(&fen) {
+    let pos = match variant.position(&fen) {
         Ok(pos) => pos,
-        Err(_) => return Box::new(ok(HttpResponse::BadRequest().body("fen illegal"))),
+        Err(_) => return Err(::rocket::http::Status::new(400, "fen illegal").into()),
     };
 
-    tablebase.mainline(pos)
-        .from_err()
-        .map(|res| match res {
-            Ok(res) => HttpResponse::Ok().json(res),
-            Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
-                HttpResponse::NotFound().body("position not found in tablebase")
-            }
-            Err(err) => {
-                error!("probing mainline failed: {}", err.to_string());
-                HttpResponse::InternalServerError().body(err.to_string())
-            }
-        })
-        .responder()
+    match tablebases.mainline(pos) {
+        Ok(res) => Ok(Json(res)),
+        Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
+            Err(::rocket::http::Status::new(404, "position not found in tablebase").into())
+        }
+        Err(err) => {
+            Err(::rocket::http::Status::new(505, "probing mainline failed").into())
+        }
+    }
 }
 
 #[derive(StructOpt)]
@@ -512,11 +451,11 @@ fn main() {
     }
 
     // Setup logging.
-    let env = env_logger::Env::default()
+    /* let env = env_logger::Env::default()
         .filter_or(env_logger::DEFAULT_FILTER_ENV, "lila_tablebase=info,actix_web=info");
     env_logger::Builder::from_env(env)
         .default_format_timestamp(false)
-        .init();
+        .init(); */
 
     // Initialize Syzygy tablebases.
     let mut standard = SyzygyTablebase::<Chess>::new();
@@ -553,20 +492,8 @@ fn main() {
     }
 
     // Start server.
-    let system = actix::System::new("lila-tablebase");
-
-    let tablebase = TablebaseStub::new(SyncArbiter::start(opt.disks, move || Tablebase {
-        standard: standard.clone(),
-        atomic: atomic.clone(),
-        antichess: antichess.clone(),
-    }));
-
-    let server = server::new(move || {
-        App::with_state(tablebase.clone())
-            .resource("/{variant}", |r| r.get().with3(api))
-            .resource("/{variant}/mainline", |r| r.get().with3(mainline))
-    });
-
-    server.workers(opt.threads).bind(opt.bind).unwrap().start();
-    system.run();
+    rocket::ignite()
+        .manage(Tablebases { standard, atomic, antichess })
+        .mount("/", routes![probe])
+        .launch();
 }
