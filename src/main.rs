@@ -38,7 +38,6 @@ use std::ffi::CString;
 use std::fmt;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
-use std::sync::Arc;
 use structopt::StructOpt;
 
 enum Variant {
@@ -214,9 +213,9 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
 }
 
 struct Tablebases {
-    standard: Arc<SyzygyTablebase<Chess>>,
-    atomic: Arc<SyzygyTablebase<Atomic>>,
-    antichess: Arc<SyzygyTablebase<Giveaway>>,
+    standard: SyzygyTablebase<Chess>,
+    atomic: SyzygyTablebase<Atomic>,
+    antichess: SyzygyTablebase<Giveaway>,
 }
 
 impl Tablebases {
@@ -471,10 +470,6 @@ fn main() {
     for path in opt.antichess {
         antichess.add_directory(path).expect("open antichess directory");
     }
-
-    let standard = Arc::new(standard);
-    let atomic = Arc::new(atomic);
-    let antichess = Arc::new(antichess);
 
     // Initialize Gaviota tablebase.
     if !opt.gaviota.is_empty() {
