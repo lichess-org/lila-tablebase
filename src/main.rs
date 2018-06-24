@@ -9,7 +9,6 @@ extern crate log;
 extern crate env_logger;
 extern crate rocket;
 extern crate rocket_contrib;
-#[macro_use]
 extern crate serde;
 extern crate shakmaty;
 extern crate shakmaty_syzygy;
@@ -23,8 +22,6 @@ use rocket::State;
 use rocket::http::RawStr;
 use rocket::request::FromParam;
 use rocket::response::Failure;
-use rocket::response::Responder;
-use rocket::response::status::BadRequest;
 use rocket_contrib::Json;
 use std::borrow::Borrow;
 use shakmaty::fen::{Fen, FenError, FenOpts};
@@ -35,7 +32,6 @@ use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
-use std::fmt;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -443,15 +439,6 @@ struct Opt {
     /// Directory with Gaviota tablebase files.
     #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
-    /// Bind the HTTP server on this address.
-    #[structopt(long = "bind", default_value = "127.0.0.1:8080")]
-    bind: String,
-    /// Number of HTTP server threads.
-    #[structopt(long = "threads", default_value = "1")]
-    threads: usize,
-    /// Number of probing threads. A good default is the number of disks.
-    #[structopt(long = "disks", default_value = "5")]
-    disks: usize,
 }
 
 fn main() {
@@ -462,13 +449,6 @@ fn main() {
         println!();
         return;
     }
-
-    // Setup logging.
-    /* let env = env_logger::Env::default()
-        .filter_or(env_logger::DEFAULT_FILTER_ENV, "lila_tablebase=info,actix_web=info");
-    env_logger::Builder::from_env(env)
-        .default_format_timestamp(false)
-        .init(); */
 
     // Initialize Syzygy tablebases.
     let mut standard = SyzygyTablebase::<Chess>::new();
@@ -503,6 +483,6 @@ fn main() {
     // Start server.
     rocket::ignite()
         .manage(Tablebases { standard, atomic, antichess })
-        .mount("/", routes![probe])
+        .mount("/", routes![probe, mainline])
         .launch();
 }
