@@ -2,8 +2,8 @@ lila-tablebase
 ==============
 
 Tablebase server for [lichess.org](https://tablebase.lichess.ovh),
-based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy)
-and [actix-web](https://actix.rs/).
+based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy).
+and [Rocket](https://rocket.rs/).
 
 [![Build Status](https://travis-ci.org/niklasf/lila-tablebase.svg?branch=master)](https://travis-ci.org/niklasf/lila-tablebase)
 
@@ -27,9 +27,6 @@ OPTIONS:
         --antichess <antichess>...    Directory with tablebase files for antichess.
         --atomic <atomic>...          Directory with tablebase files for atomic chess.
         --gaviota <gaviota>...        Directory with Gaviota tablebase files.
-        --bind <bind>                 Bind the HTTP server on this address. [default: 127.0.0.1:8080]
-        --disks <disks>               Number of probing threads. A good default is the number of disks. [default: 5]
-        --threads <threads>           Number of HTTP server threads. [default: 1]
 ```
 
 HTTP API
