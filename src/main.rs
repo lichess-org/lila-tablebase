@@ -19,9 +19,9 @@ extern crate structopt;
 
 use arrayvec::ArrayVec;
 use rocket::State;
-use rocket::http::RawStr;
+use rocket::http::{RawStr, Status};
 use rocket::request::FromParam;
-use rocket::response::Failure;
+use rocket::response::status;
 use rocket_contrib::Json;
 use std::borrow::Borrow;
 use shakmaty::fen::{Fen, FenError, FenOpts};
@@ -363,15 +363,15 @@ impl QueryString {
 }
 
 #[get("/<variant>?<query>")]
-fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<TablebaseResponse>, Failure> {
+fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<TablebaseResponse>, status::Custom<&'static str>> {
     let fen = match query.fen() {
         Ok(fen) => fen,
-        Err(_) => return Err(::rocket::http::Status::new(400, "fen invalid").into()),
+        Err(_) => return Err(status::Custom(Status::BadRequest, "fen invalid")),
     };
 
     let pos = match variant.position(&fen) {
         Ok(pos) => pos,
-        Err(_) => return Err(::rocket::http::Status::new(400, "fen illegal").into()),
+        Err(_) => return Err(status::Custom(Status::BadRequest, "fen illegal")),
     };
 
     match pos {
@@ -386,22 +386,22 @@ fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) ->
     match tablebases.probe(&pos) {
         Ok(res) => Ok(Json(res)),
         Err(err) => {
-            error!("probing failed: {}", err.to_string());
-            Err(::rocket::http::Status::new(505, "probe failed").into())
+            error!("probe failed: {}", err.to_string());
+            Err(status::Custom(Status::InternalServerError, "probe failed"))
         }
     }
 }
 
 #[get("/<variant>/mainline?<query>")]
-fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<MainlineResponse>, Failure> {
+fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<MainlineResponse>, status::Custom<&'static str>> {
     let fen = match query.fen() {
         Ok(fen) => fen,
-        Err(_) => return Err(::rocket::http::Status::new(400, "fen invalid").into()),
+        Err(_) => return Err(status::Custom(Status::BadRequest, "fen invalid")),
     };
 
     let pos = match variant.position(&fen) {
         Ok(pos) => pos,
-        Err(_) => return Err(::rocket::http::Status::new(400, "fen illegal").into()),
+        Err(_) => return Err(status::Custom(Status::BadRequest, "fen illegal")),
     };
 
     match pos {
@@ -416,11 +416,11 @@ fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString)
     match tablebases.mainline(pos) {
         Ok(res) => Ok(Json(res)),
         Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
-            Err(::rocket::http::Status::new(404, "position not found in tablebase").into())
+            Err(status::Custom(Status::NotFound, "position not found in tablebase"))
         }
         Err(err) => {
-            error!("probing mainline failed: {}", err.to_string());
-            Err(::rocket::http::Status::new(505, "probing mainline failed").into())
+            error!("mainline probe failed: {}", err.to_string());
+            Err(status::Custom(Status::InternalServerError, "failed to probe mainline"))
         }
     }
 }
