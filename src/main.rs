@@ -6,7 +6,6 @@ extern crate arrayvec;
 extern crate gaviota_sys;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate serde;

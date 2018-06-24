@@ -2,5 +2,4 @@
 address = "127.0.0.1"
 port = 9000
 workers = 5
-#log = "critical"
-#secret_key =
+# secret_key = "?" (generate using openssl rand -base64 32)
