@@ -376,11 +376,11 @@ fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) ->
 
     match pos {
         VariantPosition::Standard(ref pos) =>
-            info!("standard: {}", FenOpts::default().fen(pos)),
+            println!("standard: {}", FenOpts::default().fen(pos)),
         VariantPosition::Atomic(ref pos) =>
-            info!("atomic: {}", FenOpts::default().fen(pos)),
+            println!("atomic: {}", FenOpts::default().fen(pos)),
         VariantPosition::Antichess(ref pos) =>
-            info!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
+            println!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
     match tablebases.probe(&pos) {
@@ -406,11 +406,11 @@ fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString)
 
     match pos {
         VariantPosition::Standard(ref pos) =>
-            info!("standard mainline: {}", FenOpts::default().fen(pos)),
+            println!("standard mainline: {}", FenOpts::default().fen(pos)),
         VariantPosition::Atomic(ref pos) =>
-            info!("atomic mainline: {}", FenOpts::default().fen(pos)),
+            println!("atomic mainline: {}", FenOpts::default().fen(pos)),
         VariantPosition::Antichess(ref pos) =>
-            info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
+            println!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
     match tablebases.mainline(pos) {
