@@ -35,6 +35,7 @@ use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+#[derive(Debug)]
 enum Variant {
     Standard,
     Atomic,
@@ -385,7 +386,7 @@ fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) ->
     match tablebases.probe(&pos) {
         Ok(res) => Ok(Json(res)),
         Err(err) => {
-            error!("probe failed: {}", err.to_string());
+            error!("probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
             Err(status::Custom(Status::InternalServerError, "probe failed"))
         }
     }
@@ -418,7 +419,7 @@ fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString)
             Err(status::Custom(Status::NotFound, "position not found in tablebase"))
         }
         Err(err) => {
-            error!("mainline probe failed: {}", err.to_string());
+            error!("mainline probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
             Err(status::Custom(Status::InternalServerError, "failed to probe mainline"))
         }
     }
