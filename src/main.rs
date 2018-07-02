@@ -237,10 +237,18 @@ impl Tablebases {
         }
 
         let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i32;
+        let real_dtz = dtz.add_plies(halfmove_clock);
 
-        let dtz = dtz.add_plies(halfmove_clock);
-        if dtz.0.abs() != 100 || halfmove_clock == 0 {
-            return Ok(Wdl::from_dtz_after_zeroing(dtz));
+        if real_dtz.0.abs() != 100 || halfmove_clock == 0 {
+            // Unambiguous.
+            return Ok(Wdl::from_dtz_after_zeroing(real_dtz));
+        }
+
+        if halfmove_clock == 1 && dtz.0.abs() == 99 {
+            // This could only be a cursed/blessed result if the dtz was
+            // actually 100 instead of 99. But tables with DTZ 100 will always
+            // store precise DTZ values, hence it could not have been 100.
+            return Ok(Wdl::from_dtz_after_zeroing(real_dtz));
         }
 
         let best = self.best_move(pos)?.expect("has moves");
@@ -288,7 +296,6 @@ impl Tablebases {
     }
 
     fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
-
         let mut moves = MoveList::new();
         pos.borrow().legal_moves(&mut moves);
 
