@@ -2,6 +2,8 @@
 #![feature(custom_derive)]
 #![plugin(rocket_codegen)]
 
+#![warn(bare_trait_objects)]
+
 extern crate arrayvec;
 extern crate gaviota_sys;
 #[macro_use]
@@ -73,7 +75,7 @@ enum VariantPosition {
 }
 
 impl VariantPosition {
-    fn borrow(&self) -> &Position {
+    fn borrow(&self) -> &dyn Position {
         match *self {
             VariantPosition::Standard(ref pos) => pos,
             VariantPosition::Atomic(ref pos) => pos,
@@ -81,7 +83,7 @@ impl VariantPosition {
         }
     }
 
-    fn borrow_mut(&mut self) -> &mut Position {
+    fn borrow_mut(&mut self) -> &mut dyn Position {
         match *self {
             VariantPosition::Standard(ref mut pos) => pos,
             VariantPosition::Atomic(ref mut pos) => pos,
