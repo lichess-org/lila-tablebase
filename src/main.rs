@@ -20,6 +20,7 @@ extern crate structopt;
 
 use arrayvec::ArrayVec;
 use rocket::State;
+use rocket::config::{Config, Environment};
 use rocket::http::{RawStr, Status};
 use rocket::request::FromParam;
 use rocket::response::status;
@@ -448,6 +449,16 @@ struct Opt {
     /// Directory with Gaviota tablebase files.
     #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
+
+    /// Listen on this address.
+    #[structopt(long = "address", default_value = "127.0.0.1")]
+    address: String,
+    /// Listen on this port.
+    #[structopt(long = "port", default_value = "9000")]
+    port: u16,
+    /// Number of worker threads.
+    #[structopt(long = "workers", default_value = "5")]
+    workers: u16
 }
 
 fn main() {
@@ -458,6 +469,13 @@ fn main() {
         println!();
         return;
     }
+
+    let config = Config::build(Environment::Production)
+        .address(opt.address)
+        .port(opt.port)
+        .workers(opt.workers)
+        .secret_key("+++++++++++++unused++secret++key++++++++++++")
+        .unwrap();
 
     // Initialize Syzygy tablebases.
     let mut standard = SyzygyTablebase::<Chess>::new();
@@ -490,7 +508,7 @@ fn main() {
     }
 
     // Start server.
-    rocket::ignite()
+    rocket::custom(config, true)
         .manage(Tablebases { standard, atomic, antichess })
         .mount("/", routes![probe, mainline])
         .launch();
