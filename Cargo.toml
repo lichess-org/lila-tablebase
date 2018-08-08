@@ -23,7 +23,7 @@ rocket_codegen = "0.3.14"
 rocket_contrib = "0.3.14"
 
 [dependencies.shakmaty-syzygy]
-version = "0.7"
+git = "https://github.com/niklasf/shakmaty-syzygy"
 features = ["serde-1"]
 
 [dependencies.arrayvec]
