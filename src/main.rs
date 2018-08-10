@@ -235,7 +235,7 @@ impl Tablebases {
     }
 
     fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
-        if let Some(ref outcome) = pos.borrow().outcome() {
+        if let Some(outcome) = pos.borrow().outcome() {
             return Ok(Wdl::from_outcome(outcome, pos.borrow().turn()));
         }
 

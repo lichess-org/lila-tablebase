@@ -398,8 +398,8 @@ dependencies = [
  "rocket_contrib 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)",
- "shakmaty 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "shakmaty-syzygy 0.7.0 (git+https://github.com/niklasf/shakmaty-syzygy)",
+ "shakmaty 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "shakmaty-syzygy 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "shakmaty"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -727,8 +727,8 @@ dependencies = [
 
 [[package]]
 name = "shakmaty-syzygy"
-version = "0.7.0"
-source = "git+https://github.com/niklasf/shakmaty-syzygy#b08a6937fa89495a8a7230784983070b760f33ca"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "bit-vec 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -742,7 +742,7 @@ dependencies = [
  "num-integer 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "positioned-io 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)",
- "shakmaty 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "shakmaty 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1081,8 +1081,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum serde 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)" = "6dfad05c8854584e5f72fb859385ecdfa03af69c3fd0572f0da2d4c95f060bdb"
 "checksum serde_derive 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)" = "b719c6d5e9f73fbc37892246d5852333f040caa617b8873c6aced84bcb28e7bb"
 "checksum serde_json 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)" = "c3c6908c7b925cd6c590358a4034de93dbddb20c45e1d021931459fd419bf0e2"
-"checksum shakmaty 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3eb174bd8c5efc3022c38623edc83c6709bc00440b3ec52bf1a90e105730f5e3"
-"checksum shakmaty-syzygy 0.7.0 (git+https://github.com/niklasf/shakmaty-syzygy)" = "<none>"
+"checksum shakmaty 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a1898ae37aa21ebc1d7a6d821ea6643253fcc9f0f9b504f4744d91b074b1b4a4"
+"checksum shakmaty-syzygy 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4f0e45dabebb56ebc9694016047bb6578432a2a9a27e33ab35a819c51cf92d04"
 "checksum smallvec 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "211a489e65e94b103926d2054ae515a1cdb5d515ea0ef414fee23b7e043ce748"
 "checksum state 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7345c971d1ef21ffdbd103a75990a15eb03604fc8b8852ca8cb418ee1a099028"
 "checksum strsim 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bb4f380125926a99e52bc279241539c018323fab05ad6368b56f93d9369ff550"
