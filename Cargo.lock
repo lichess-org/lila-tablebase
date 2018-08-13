@@ -728,7 +728,7 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.8.0"
-source = "git+https://github.com/niklasf/shakmaty-syzygy.git#c0cefc4eb5597be18b569cccd0d4dd6c50146f28"
+source = "git+https://github.com/niklasf/shakmaty-syzygy.git#05feafc08f1b171cc390ed2984c7d2d5cb9af97e"
 dependencies = [
  "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "bit-vec 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
