@@ -107,6 +107,7 @@ name | type | default | description
 }
 ```
 
+Claims draw by 50-move rule as soon as possible and ends the mainline.
 Error 404 if not a tablebase position or required tables not present.
 
 ### `GET /atomic`
@@ -117,7 +118,7 @@ Acknowledgements
 ----------------
 
 Thanks to Ronald de Man for his [Syzygy endgame tables](https://github.com/syzygy1/tb).
-Thanks to Bojun Guo for generating and [sharing](http://www.talkchess.com/forum/viewtopic.php?t=66797) experimental 7-man tables.
+Thanks to Bojun Guo for generating and [sharing](http://www.talkchess.com/forum/viewtopic.php?t=66797) 7-piece tables.
 
 License
 -------

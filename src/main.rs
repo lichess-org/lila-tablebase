@@ -248,7 +248,7 @@ impl Tablebases {
         }
 
         if halfmove_clock == 1 && dtz.0.abs() == 99 {
-            // This could only be a cursed/blessed result if the dtz was
+            // This could only be a cursed/blessed result if the DTZ was
             // actually 100 instead of 99. But tables with DTZ 100 will always
             // store precise DTZ values, hence it could not have been 100.
             return Ok(Wdl::from_dtz_after_zeroing(real_dtz));
