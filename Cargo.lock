@@ -394,7 +394,7 @@ dependencies = [
  "serde 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "shakmaty 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "shakmaty-syzygy 0.8.0 (git+https://github.com/niklasf/shakmaty-syzygy.git)",
+ "shakmaty-syzygy 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -727,8 +727,8 @@ dependencies = [
 
 [[package]]
 name = "shakmaty-syzygy"
-version = "0.8.0"
-source = "git+https://github.com/niklasf/shakmaty-syzygy.git#4102a08d8309e9fbd1b737cdba41b3f970d46769"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "arrayvec 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "bit-vec 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1081,7 +1081,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum serde_derive 1.0.71 (registry+https://github.com/rust-lang/crates.io-index)" = "b719c6d5e9f73fbc37892246d5852333f040caa617b8873c6aced84bcb28e7bb"
 "checksum serde_json 1.0.26 (registry+https://github.com/rust-lang/crates.io-index)" = "44dd2cfde475037451fa99b7e5df77aa3cfd1536575fa8e7a538ab36dcde49ae"
 "checksum shakmaty 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a1898ae37aa21ebc1d7a6d821ea6643253fcc9f0f9b504f4744d91b074b1b4a4"
-"checksum shakmaty-syzygy 0.8.0 (git+https://github.com/niklasf/shakmaty-syzygy.git)" = "<none>"
+"checksum shakmaty-syzygy 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "e6c1b5de3caa9c430bcdac2134e38cc2f532275933a39e37bfed2d88cba4120a"
 "checksum smallvec 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "211a489e65e94b103926d2054ae515a1cdb5d515ea0ef414fee23b7e043ce748"
 "checksum state 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7345c971d1ef21ffdbd103a75990a15eb03604fc8b8852ca8cb418ee1a099028"
 "checksum strsim 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bb4f380125926a99e52bc279241539c018323fab05ad6368b56f93d9369ff550"
