@@ -15,7 +15,6 @@ extern crate serde;
 extern crate serde_derive;
 extern crate shakmaty;
 extern crate shakmaty_syzygy;
-#[macro_use]
 extern crate structopt;
 
 use arrayvec::ArrayVec;
