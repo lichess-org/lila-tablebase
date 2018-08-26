@@ -37,7 +37,7 @@ use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum Variant {
     Standard,
     Atomic,
@@ -58,7 +58,7 @@ impl<'a> FromParam<'a> for Variant {
 }
 
 impl Variant {
-    fn position(&self, fen: &Fen) -> Result<VariantPosition, PositionError> {
+    fn position(self, fen: &Fen) -> Result<VariantPosition, PositionError> {
         match self {
             Variant::Standard => fen.position().map(VariantPosition::Standard),
             Variant::Atomic => fen.position().map(VariantPosition::Atomic),
