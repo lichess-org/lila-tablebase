@@ -5,6 +5,7 @@
 #![warn(bare_trait_objects)]
 
 extern crate arrayvec;
+extern crate env_logger;
 extern crate gaviota_sys;
 #[macro_use]
 extern crate log;
@@ -461,6 +462,8 @@ struct Opt {
 }
 
 fn main() {
+    env_logger::init();
+
     // Parse arguments.
     let opt = Opt::from_args();
     if opt.standard.is_empty() && opt.atomic.is_empty() && opt.antichess.is_empty() && opt.gaviota.is_empty() {
@@ -507,7 +510,7 @@ fn main() {
     }
 
     // Start server.
-    rocket::custom(config, true)
+    rocket::custom(config, false)
         .manage(Tablebases { standard, atomic, antichess })
         .mount("/", routes![probe, mainline])
         .launch();
