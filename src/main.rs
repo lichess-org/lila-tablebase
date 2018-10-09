@@ -457,7 +457,7 @@ struct Opt {
     #[structopt(long = "port", default_value = "9000")]
     port: u16,
     /// Number of worker threads.
-    #[structopt(long = "workers", default_value = "5")]
+    #[structopt(long = "workers", default_value = "10")]
     workers: u16
 }
 
