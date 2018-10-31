@@ -18,9 +18,8 @@ serde_derive = "1.0"
 log = "0.4"
 structopt = "0.2"
 gaviota-sys = "0.1"
-rocket = "0.3.14"
-rocket_codegen = "0.3.14"
-rocket_contrib = "0.3.14"
+rocket = "0.4.0-rc.1"
+rocket_contrib = "0.4.0-rc.1"
 env_logger = "0.5"
 
 [dependencies.shakmaty-syzygy]

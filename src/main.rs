@@ -1,6 +1,4 @@
-#![feature(plugin)]
-#![feature(custom_derive)]
-#![plugin(rocket_codegen)]
+#![feature(proc_macro_hygiene, decl_macro)]
 
 #![warn(bare_trait_objects)]
 
@@ -9,6 +7,7 @@ extern crate env_logger;
 extern crate gaviota_sys;
 #[macro_use]
 extern crate log;
+#[macro_use]
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate serde;
@@ -20,11 +19,11 @@ extern crate structopt;
 
 use arrayvec::ArrayVec;
 use rocket::State;
-use rocket::config::{Config, Environment};
+use rocket::config::{Config, Environment, LoggingLevel};
 use rocket::http::{RawStr, Status};
-use rocket::request::FromParam;
+use rocket::request::{FromParam, LenientForm};
 use rocket::response::status;
-use rocket_contrib::Json;
+use rocket_contrib::json::Json;
 use shakmaty::fen::{Fen, FenError, FenOpts};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
@@ -372,8 +371,8 @@ impl QueryString {
     }
 }
 
-#[get("/<variant>?<query>")]
-fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<TablebaseResponse>, status::Custom<&'static str>> {
+#[get("/<variant>?<query..>")]
+fn probe(tablebases: State<Tablebases>, variant: Variant, query: LenientForm<QueryString>) -> Result<Json<TablebaseResponse>, status::Custom<&'static str>> {
     let fen = match query.fen() {
         Ok(fen) => fen,
         Err(_) => return Err(status::Custom(Status::BadRequest, "fen invalid")),
@@ -402,8 +401,8 @@ fn probe(tablebases: State<Tablebases>, variant: Variant, query: QueryString) ->
     }
 }
 
-#[get("/<variant>/mainline?<query>")]
-fn mainline(tablebases: State<Tablebases>, variant: Variant, query: QueryString) -> Result<Json<MainlineResponse>, status::Custom<&'static str>> {
+#[get("/<variant>/mainline?<query..>")]
+fn mainline(tablebases: State<Tablebases>, variant: Variant, query: LenientForm<QueryString>) -> Result<Json<MainlineResponse>, status::Custom<&'static str>> {
     let fen = match query.fen() {
         Ok(fen) => fen,
         Err(_) => return Err(status::Custom(Status::BadRequest, "fen invalid")),
@@ -477,6 +476,7 @@ fn main() {
         .port(opt.port)
         .workers(opt.workers)
         .secret_key("+++++++++++++unused++secret++key++++++++++++")
+        .log_level(LoggingLevel::Off)
         .unwrap();
 
     // Initialize Syzygy tablebases.
@@ -510,7 +510,7 @@ fn main() {
     }
 
     // Start server.
-    rocket::custom(config, false)
+    rocket::custom(config)
         .manage(Tablebases { standard, atomic, antichess })
         .mount("/", routes![probe, mainline])
         .launch();
