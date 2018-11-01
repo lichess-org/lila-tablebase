@@ -8,8 +8,8 @@ After=network.target
 LimitNOFILE=83368
 User=www-data
 Group=www-data
-Environment=ROCKET_ENV=production
-ExecStart=/usr/local/bin/lila-tablebase --standard standard/3-4-5 --standard standard/6-wdl --standard standard/6-dtz --standard standard/7 --gaviota standard/Gaviota --atomic atomic/3-4-5 --atomic atomic/6-wdl --atomic atomic/6-dtz --antichess antichess/2-3-4-5-pawnless --antichess antichess/2-3-4-5-giveaway --antichess antichess/6-pawnless --antichess antichess/6-giveaway
+Environment=RUST_LOG=lila_tablebase=info
+ExecStart=/usr/local/bin/lila-tablebase --standard standard/3-4-5 --standard standard/6-wdl --standard standard/6-dtz --standard standard/7/6v1_pawnless --standard standard/7/6v1_pawnful --standard standard/7/5v2_pawnless --standard standard/7/5v2_pawnful --standard standard/7/4v3_pawnless --standard standard/7/4v3_pawnful --gaviota standard/Gaviota --atomic atomic/3-4-5 --atomic atomic/6-wdl --atomic atomic/6-dtz --antichess antichess/2-3-4-5-pawnless --antichess antichess/2-3-4-5-giveaway --antichess antichess/6-pawnless --antichess antichess/6-giveaway
 WorkingDirectory=/home/tables
 PrivateTmp=true
 PrivateDevices=true
