@@ -24,7 +24,7 @@ use rocket::http::{RawStr, Status};
 use rocket::request::{FromParam, LenientForm};
 use rocket::response::status;
 use rocket_contrib::json::Json;
-use shakmaty::fen::{Fen, FenError, FenOpts};
+use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
 use shakmaty::variants::{Atomic, Chess, Giveaway};
@@ -238,15 +238,15 @@ impl Tablebases {
             return Ok(Wdl::from_outcome(outcome, pos.borrow().turn()));
         }
 
-        let halfmove_clock = min(101, pos.borrow().halfmove_clock()) as i32;
-        let before_zeroing = dtz.add_plies(halfmove_clock);
+        let halfmoves = min(101, pos.borrow().halfmoves()) as i32;
+        let before_zeroing = dtz.add_plies(halfmoves);
 
-        if before_zeroing.0.abs() != 100 || halfmove_clock == 0 {
+        if before_zeroing.0.abs() != 100 || halfmoves == 0 {
             // Unambiguous.
             return Ok(Wdl::from_dtz_after_zeroing(before_zeroing));
         }
 
-        if halfmove_clock == 1 && dtz.0.abs() == 99 {
+        if halfmoves == 1 && dtz.0.abs() == 99 {
             // This could only be a cursed/blessed result if the real DTZ was
             // 100 instead of 99. But tables with DTZ 100 will always
             // store precise DTZ values, hence it could not have been 100.
@@ -338,7 +338,7 @@ impl Tablebases {
         let mut mainline = Vec::new();
 
         if dtz != Dtz(0) {
-            while pos.borrow().halfmove_clock() < 100 {
+            while pos.borrow().halfmoves() < 100 {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
                         uci: pos.uci(&m).to_string(),
@@ -366,7 +366,7 @@ struct QueryString {
 }
 
 impl QueryString {
-    fn fen(&self) -> Result<Fen, FenError> {
+    fn fen(&self) -> Result<Fen, ParseFenError> {
         str::replace(&self.fen, '_', " ").parse()
     }
 }
