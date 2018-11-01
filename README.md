@@ -23,10 +23,13 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-        --standard <standard>...      Directory with tablebase files for standard chess.
+        --address <address>           Listen on this address. [default: 127.0.0.1]
+        --port <port>                 Listen on this port. [default: 9000]
+        --workers <workers>           Number of worker threads. [default: 10]
         --antichess <antichess>...    Directory with tablebase files for antichess.
         --atomic <atomic>...          Directory with tablebase files for atomic chess.
         --gaviota <gaviota>...        Directory with Gaviota tablebase files.
+        --standard <standard>...      Directory with tablebase files for standard chess.
 ```
 
 HTTP API
