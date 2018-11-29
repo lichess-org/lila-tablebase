@@ -979,7 +979,6 @@ dependencies = [
  "libc 0.2.44 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-integer 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "positioned-io-preview 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.80 (registry+https://github.com/rust-lang/crates.io-index)",
  "shakmaty 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

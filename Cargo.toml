@@ -21,10 +21,7 @@ gaviota-sys = "0.1"
 rocket = "0.4.0-rc.1"
 rocket_contrib = "0.4.0-rc.1"
 env_logger = "0.6"
-
-[dependencies.shakmaty-syzygy]
-git = "https://github.com/niklasf/shakmaty-syzygy.git"
-features = ["serde-1"]
+shakmaty-syzygy = { git = "https://github.com/niklasf/shakmaty-syzygy.git" }
 
 [dependencies.arrayvec]
 version = "0.4"
