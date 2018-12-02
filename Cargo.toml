@@ -18,8 +18,8 @@ serde_derive = "1.0"
 log = "0.4"
 structopt = "0.2"
 gaviota-sys = "0.1"
-rocket = "0.4.0-rc.1"
-rocket_contrib = "0.4.0-rc.1"
+rocket = "0.4.0-rc.2"
+rocket_contrib = "0.4.0-rc.2"
 env_logger = "0.6"
 shakmaty-syzygy = { git = "https://github.com/niklasf/shakmaty-syzygy.git" }
 
