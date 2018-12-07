@@ -12,7 +12,7 @@ categories = ["games"]
 keywords = ["chess", "syzygy", "tablebase"]
 
 [dependencies]
-shakmaty = "0.12"
+shakmaty = "0.13"
 serde = "1.0"
 serde_derive = "1.0"
 log = "0.4"
@@ -21,7 +21,7 @@ gaviota-sys = "0.1"
 rocket = "0.4"
 rocket_contrib = "0.4"
 env_logger = "0.6"
-shakmaty-syzygy = { git = "https://github.com/niklasf/shakmaty-syzygy.git" }
+shakmaty-syzygy = "0.10"
 
 [dependencies.arrayvec]
 version = "0.4"
