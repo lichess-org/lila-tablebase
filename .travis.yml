@@ -3,3 +3,9 @@ sudo: false
 
 rust:
  - nightly
+
+before_script:
+ - cargo install --force cargo-audit
+script:
+ - cargo check
+ - cargo audit
