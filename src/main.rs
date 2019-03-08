@@ -23,7 +23,7 @@ use tide::configuration::Configuration;
 use tide::head::QueryParams;
 use tide::{App, AppData, IntoResponse};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum Variant {
     Standard,
     Atomic,
@@ -40,7 +40,7 @@ impl Variant {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum VariantPosition {
     Standard(Chess),
     Atomic(Atomic),
@@ -105,14 +105,14 @@ where
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct TablebaseResponse {
     #[serde(flatten)]
     pos: PositionInfo,
     moves: ArrayVec<[MoveInfo; 256]>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct MoveInfo {
     uci: String,
     san: String,
@@ -125,7 +125,7 @@ struct MoveInfo {
     pos: PositionInfo,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct PositionInfo {
     checkmate: bool,
     stalemate: bool,
@@ -139,7 +139,7 @@ struct PositionInfo {
     dtm: Option<i32>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct MainlineResponse {
     mainline: Vec<MainlineStep>,
     winner: Option<char>,
@@ -147,7 +147,7 @@ struct MainlineResponse {
     dtz: Dtz,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct MainlineStep {
     uci: String,
     #[serde(serialize_with = "into_i32")]
