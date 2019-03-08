@@ -5,7 +5,7 @@ use serde_derive::{Deserialize, Serialize};
 use shakmaty::{Outcome, Move, MoveList, Role, Position, Setup, PositionError};
 use shakmaty::variants::{Atomic, Chess, Giveaway};
 use shakmaty::uci::Uci;
-use shakmaty::san::{San, SanPlus};
+use shakmaty::san::SanPlus;
 use shakmaty::fen::{Fen, ParseFenError, FenOpts};
 use shakmaty_syzygy::{Tablebase as SyzygyTablebase, Wdl, Dtz, SyzygyError};
 
@@ -19,12 +19,12 @@ use http::status::StatusCode;
 use structopt::StructOpt;
 
 use futures_01;
-use futures::task::Poll;
 use futures::compat::Future01CompatExt;
 
 use arrayvec::ArrayVec;
 
 use std::cmp::{min, Reverse};
+use std::ffi::CString;
 use std::sync::Arc;
 use std::path::PathBuf;
 use std::os::raw::{c_int, c_uchar, c_uint};
@@ -509,6 +509,21 @@ fn main() {
             antichess: Arc::new(antichess),
         }
     };
+
+    // Initialize Gaviota tablebase.
+    if !opt.gaviota.is_empty() {
+        unsafe {
+            assert!(gaviota_sys::tbcache_init(1014 * 1024, 50) != 0);
+            let mut paths = gaviota_sys::tbpaths_init();
+            assert!(!paths.is_null());
+            for path in opt.gaviota {
+                let path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
+                paths = gaviota_sys::tbpaths_add(paths, path.as_ptr());
+                assert!(!paths.is_null());
+            }
+            assert!(!gaviota_sys::tb_init(1, gaviota_sys::TB_compression_scheme::tb_CP4 as c_int, paths).is_null());
+        }
+    }
 
     // Start server.
     let mut app = App::new(tbs);
