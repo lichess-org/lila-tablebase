@@ -1,6 +1,6 @@
 [package]
-name = "lila-tablebase2"
-version = "0.1.0"
+name = "lila-tablebase"
+version = "0.2.0"
 authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
 edition = "2018"
 
@@ -18,3 +18,4 @@ shakmaty-syzygy = "0.10.0"
 gaviota-sys = "0.1.6"
 arrayvec = { version = "0.4.10", features = ["serde-1"] }
 log = "0.4.6"
+env_logger = "0.6.1"
