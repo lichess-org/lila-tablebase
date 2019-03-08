@@ -13,3 +13,5 @@ http = "0.1.16"
 tokio-threadpool = "0.1.12"
 futures-01 = { version = "0.1", package = "futures" }
 futures-preview = { version = "0.3.0-alpha.13", features = ["compat"] }
+structopt = "0.2.14"
+shakmaty-syzygy = "0.10.0"
