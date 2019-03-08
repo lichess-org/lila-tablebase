@@ -1,28 +1,15 @@
 [package]
-name = "lila-tablebase"
-version = "0.1.0" # remember to update html_root_url
-publish = false
-description = "A Syzygy tablebase server"
-homepage = "https://tablebase.lichess.org"
-repository = "https://github.com/niklasf/lila-tablebase"
-readme = "README.md"
-license = "AGPL-3.0+"
+name = "lila-tablebase2"
+version = "0.1.0"
 authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
-categories = ["games"]
-keywords = ["chess", "syzygy", "tablebase"]
+edition = "2018"
 
 [dependencies]
-shakmaty = "0.13"
-serde = "1.0"
-serde_derive = "1.0"
-log = "0.4"
-structopt = "0.2"
-gaviota-sys = "0.1"
-rocket = "0.4"
-rocket_contrib = "0.4"
-env_logger = "0.6"
-shakmaty-syzygy = "0.10"
-
-[dependencies.arrayvec]
-version = "0.4"
-features = ["serde-1"]
+tide = { git = "https://github.com/niklasf/tide.git", branch = "query-params" }
+serde_derive = "1.0.89"
+serde = "1.0.89"
+shakmaty = "0.13.1"
+http = "0.1.16"
+tokio-threadpool = "0.1.12"
+futures-01 = { version = "0.1", package = "futures" }
+futures-preview = { version = "0.3.0-alpha.13", features = ["compat"] }
