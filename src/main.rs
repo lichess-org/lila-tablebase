@@ -1,35 +1,27 @@
 #![feature(futures_api, async_await, await_macro)]
 
 use serde_derive::{Deserialize, Serialize};
-
-use shakmaty::{Outcome, Move, MoveList, Role, Position, Setup, PositionError};
-use shakmaty::variants::{Atomic, Chess, Giveaway};
-use shakmaty::uci::Uci;
+use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
-use shakmaty::fen::{Fen, ParseFenError, FenOpts};
-use shakmaty_syzygy::{Tablebase as SyzygyTablebase, Wdl, Dtz, SyzygyError};
-
-use tide::{App, AppData, IntoResponse};
-use tide::configuration::Configuration;
+use shakmaty::uci::Uci;
+use shakmaty::variants::{Atomic, Chess, Giveaway};
+use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
+use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use tide::body::Json;
+use tide::configuration::Configuration;
 use tide::head::QueryParams;
-
+use tide::{App, AppData, IntoResponse};
 use http::status::StatusCode;
-
 use structopt::StructOpt;
-
-use futures_01;
 use futures::compat::Future01CompatExt;
-
+use futures_01;
 use arrayvec::ArrayVec;
-
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
-use std::sync::Arc;
-use std::path::PathBuf;
 use std::os::raw::{c_int, c_uchar, c_uint};
-
-use log::{info, warn, error};
+use std::path::PathBuf;
+use std::sync::Arc;
+use log::{error, info, warn};
 
 #[derive(Debug, Copy, Clone)]
 enum Variant {
@@ -381,7 +373,11 @@ impl Query {
     }
 }
 
-async fn probe(variant: Variant, AppData(tablebases): AppData<Tablebases>, QueryParams(query): QueryParams<Query>) -> Result<Json<TablebaseResponse>, impl IntoResponse> {
+async fn probe(
+    variant: Variant,
+    AppData(tablebases): AppData<Tablebases>,
+    QueryParams(query): QueryParams<Query>,
+) -> Result<Json<TablebaseResponse>, impl IntoResponse> {
     let fen = match query.fen() {
         Ok(fen) => fen,
         Err(_) => return Err("fen invalid".with_status(StatusCode::BAD_REQUEST)),
@@ -414,7 +410,11 @@ async fn probe(variant: Variant, AppData(tablebases): AppData<Tablebases>, Query
     await!(Future01CompatExt::compat(old)).expect("tokio threadpool active")
 }
 
-async fn mainline(variant: Variant, AppData(tablebases): AppData<Tablebases>, QueryParams(query): QueryParams<Query>) -> Result<Json<MainlineResponse>, impl IntoResponse> {
+async fn mainline(
+    variant: Variant,
+    AppData(tablebases): AppData<Tablebases>,
+    QueryParams(query): QueryParams<Query>,
+) -> Result<Json<MainlineResponse>, impl IntoResponse> {
     let fen = match query.fen() {
         Ok(fen) => fen,
         Err(_) => return Err("fen invalid".with_status(StatusCode::BAD_REQUEST)),
