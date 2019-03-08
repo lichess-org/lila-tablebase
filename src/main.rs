@@ -381,7 +381,7 @@ impl Query {
     }
 }
 
-async fn probe(variant: Variant, AppData(tbs): AppData<Tablebases>, QueryParams(query): QueryParams<Query>) -> Result<Json<TablebaseResponse>, impl IntoResponse> {
+async fn probe(variant: Variant, AppData(tablebases): AppData<Tablebases>, QueryParams(query): QueryParams<Query>) -> Result<Json<TablebaseResponse>, impl IntoResponse> {
     let fen = match query.fen() {
         Ok(fen) => fen,
         Err(_) => return Err("fen invalid".with_status(StatusCode::BAD_REQUEST)),
@@ -402,10 +402,46 @@ async fn probe(variant: Variant, AppData(tbs): AppData<Tablebases>, QueryParams(
     }
 
     let old = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| match tbs.probe(&pos) {
+        tokio_threadpool::blocking(|| match tablebases.probe(&pos) {
             Ok(res) => Ok(Json(res)),
             Err(err) => {
                 error!("probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
+                Err("probe failed".with_status(StatusCode::INTERNAL_SERVER_ERROR))
+            }
+        })
+    }));
+
+    await!(Future01CompatExt::compat(old)).expect("tokio threadpool active")
+}
+
+async fn mainline(variant: Variant, AppData(tablebases): AppData<Tablebases>, QueryParams(query): QueryParams<Query>) -> Result<Json<MainlineResponse>, impl IntoResponse> {
+    let fen = match query.fen() {
+        Ok(fen) => fen,
+        Err(_) => return Err("fen invalid".with_status(StatusCode::BAD_REQUEST)),
+    };
+
+    let pos = match variant.position(&fen) {
+        Ok(pos) => pos,
+        Err(_) => return Err("fen illegal".with_status(StatusCode::BAD_REQUEST)),
+    };
+
+    match pos {
+        VariantPosition::Standard(ref pos) =>
+            info!("standard mainline: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Atomic(ref pos) =>
+            info!("atomic mainline: {}", FenOpts::default().fen(pos)),
+        VariantPosition::Antichess(ref pos) =>
+            info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
+    }
+
+    let old = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
+        tokio_threadpool::blocking(|| match tablebases.mainline(pos.clone()) {
+            Ok(res) => Ok(Json(res)),
+            Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
+                Err("position not found in tablebases".with_status(StatusCode::NOT_FOUND))
+            }
+            Err(err) => {
+                error!("mainline probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
                 Err("probe failed".with_status(StatusCode::INTERNAL_SERVER_ERROR))
             }
         })
@@ -478,5 +514,10 @@ fn main() {
     let mut app = App::new(tbs);
     app.config(config);
     app.at("/standard").get(|tbs, q| probe(Variant::Standard, tbs, q));
+    app.at("/standard/mainline").get(|tbs, q| mainline(Variant::Standard, tbs, q));
+    app.at("/atomic").get(|tbs, q| probe(Variant::Atomic, tbs, q));
+    app.at("/atomic/mainline").get(|tbs, q| mainline(Variant::Atomic, tbs, q));
+    app.at("/antichess").get(|tbs, q| probe(Variant::Antichess, tbs, q));
+    app.at("/antichess/mainline").get(|tbs, q| mainline(Variant::Antichess, tbs, q));
     app.serve();
 }
