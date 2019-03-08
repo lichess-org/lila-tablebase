@@ -1,5 +1,7 @@
 #![feature(futures_api, async_await, await_macro)]
 
+#![warn(rust_2018_idioms)]
+
 use arrayvec::ArrayVec;
 use futures::compat::Future01CompatExt;
 use futures_01;
