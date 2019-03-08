@@ -3,7 +3,7 @@ lila-tablebase
 
 Tablebase server for [lichess.org](https://tablebase.lichess.ovh),
 based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy)
-and [Rocket](https://rocket.rs/).
+and [tide](https://github.com/rustasync/tide).
 
 [![Build Status](https://travis-ci.org/niklasf/lila-tablebase.svg?branch=master)](https://travis-ci.org/niklasf/lila-tablebase)
 
@@ -25,7 +25,6 @@ FLAGS:
 OPTIONS:
         --address <address>           Listen on this address. [default: 127.0.0.1]
         --port <port>                 Listen on this port. [default: 9000]
-        --workers <workers>           Number of worker threads. [default: 10]
         --antichess <antichess>...    Directory with tablebase files for antichess.
         --atomic <atomic>...          Directory with tablebase files for atomic chess.
         --gaviota <gaviota>...        Directory with Gaviota tablebase files.
