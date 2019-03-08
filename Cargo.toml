@@ -15,3 +15,6 @@ futures-01 = { version = "0.1", package = "futures" }
 futures-preview = { version = "0.3.0-alpha.13", features = ["compat"] }
 structopt = "0.2.14"
 shakmaty-syzygy = "0.10.0"
+gaviota-sys = "0.1.6"
+arrayvec = { version = "0.4.10", features = ["serde-1"] }
+log = "0.4.6"
