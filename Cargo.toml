@@ -5,7 +5,7 @@ authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
 edition = "2018"
 
 [dependencies]
-tide = { git = "https://github.com/niklasf/tide.git", branch = "query-params" }
+tide = { git = "https://github.com/niklasf/tide.git", branch = "lila-tablebase" }
 serde_derive = "1.0.89"
 serde = "1.0.89"
 shakmaty = "0.13.1"

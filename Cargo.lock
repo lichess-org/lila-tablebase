@@ -621,7 +621,7 @@ dependencies = [
  "shakmaty 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "shakmaty-syzygy 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "tide 0.0.5 (git+https://github.com/niklasf/tide.git?branch=query-params)",
+ "tide 0.0.5 (git+https://github.com/niklasf/tide.git?branch=lila-tablebase)",
  "tokio-threadpool 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -1326,7 +1326,7 @@ dependencies = [
 [[package]]
 name = "tide"
 version = "0.0.5"
-source = "git+https://github.com/niklasf/tide.git?branch=query-params#36526421a1e6f2cd068e426c086e5b045995bffb"
+source = "git+https://github.com/niklasf/tide.git?branch=lila-tablebase#a3667299e362e20a88c18ed2c58391b6d2f8f38f"
 dependencies = [
  "cookie 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-preview 0.3.0-alpha.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1784,7 +1784,7 @@ dependencies = [
 "checksum termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "689a3bdfaab439fd92bc87df5c4c78417d3cbe537487274e9b0b2dce76e92096"
 "checksum textwrap 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "307686869c93e71f94da64286f9a9524c0f308a9e1c87a583de8e9c9039ad3f6"
 "checksum thread_local 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "c6b53e329000edc2b34dbe8545fd20e55a333362d0a321909685a19bd28c3f1b"
-"checksum tide 0.0.5 (git+https://github.com/niklasf/tide.git?branch=query-params)" = "<none>"
+"checksum tide 0.0.5 (git+https://github.com/niklasf/tide.git?branch=lila-tablebase)" = "<none>"
 "checksum time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)" = "db8dcfca086c1143c9270ac42a2bbd8a7ee477b78ac8e45b19abfb0cbede4b6f"
 "checksum tokio 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)" = "fcaabb3cec70485d0df6e9454fe514393ad1c4070dee8915f11041e95630b230"
 "checksum tokio-current-thread 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "c756b04680eea21902a46fca4e9f410a2332c04995af590e07ff262e2193a9a3"

@@ -490,7 +490,7 @@ fn main() {
         .finalize();
 
     // Initialize Syzygy tablebases.
-    let tbs = {
+    let tablebases = {
         let mut standard = SyzygyTablebase::<Chess>::new();
         let mut atomic = SyzygyTablebase::<Atomic>::new();
         let mut antichess = SyzygyTablebase::<Giveaway>::new();
@@ -528,7 +528,7 @@ fn main() {
     }
 
     // Start server.
-    let mut app = App::new(tbs);
+    let mut app = App::new(tablebases);
     app.config(config);
     app.at("/standard").get(|tbs, q| probe(Variant::Standard, tbs, q));
     app.at("/standard/mainline").get(|tbs, q| mainline(Variant::Standard, tbs, q));
