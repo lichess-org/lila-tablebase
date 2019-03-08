@@ -397,7 +397,7 @@ async fn probe(
             info!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    let old = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
+    let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
         tokio_threadpool::blocking(|| match tablebases.probe(&pos) {
             Ok(res) => Ok(Json(res)),
             Err(err) => {
@@ -407,7 +407,7 @@ async fn probe(
         })
     }));
 
-    await!(Future01CompatExt::compat(old)).expect("tokio threadpool active")
+    await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")
 }
 
 async fn mainline(
@@ -434,7 +434,7 @@ async fn mainline(
             info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    let old = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
+    let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
         tokio_threadpool::blocking(|| match tablebases.mainline(pos.clone()) {
             Ok(res) => Ok(Json(res)),
             Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
@@ -447,7 +447,7 @@ async fn mainline(
         })
     }));
 
-    await!(Future01CompatExt::compat(old)).expect("tokio threadpool active")
+    await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")
 }
 
 #[derive(StructOpt, Debug)]
