@@ -1,5 +1,10 @@
 #![feature(futures_api, async_await, await_macro)]
 
+use arrayvec::ArrayVec;
+use futures::compat::Future01CompatExt;
+use futures_01;
+use http::status::StatusCode;
+use log::{error, info, warn};
 use serde_derive::{Deserialize, Serialize};
 use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
@@ -7,21 +12,16 @@ use shakmaty::uci::Uci;
 use shakmaty::variants::{Atomic, Chess, Giveaway};
 use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
-use tide::body::Json;
-use tide::configuration::Configuration;
-use tide::head::QueryParams;
-use tide::{App, AppData, IntoResponse};
-use http::status::StatusCode;
-use structopt::StructOpt;
-use futures::compat::Future01CompatExt;
-use futures_01;
-use arrayvec::ArrayVec;
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
-use log::{error, info, warn};
+use structopt::StructOpt;
+use tide::body::Json;
+use tide::configuration::Configuration;
+use tide::head::QueryParams;
+use tide::{App, AppData, IntoResponse};
 
 #[derive(Debug, Copy, Clone)]
 enum Variant {
