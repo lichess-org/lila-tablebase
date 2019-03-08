@@ -11,7 +11,7 @@ Usage
 -----
 
 ```
-lila-tablebase 0.1.0
+lila-tablebase 0.2.0
 Niklas Fiekas <niklas.fiekas@backscattering.de>
 A Syzygy tablebase server
 
