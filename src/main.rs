@@ -3,8 +3,9 @@
 #![warn(rust_2018_idioms)]
 
 use arrayvec::ArrayVec;
-use futures::compat::Future01CompatExt;
+use futures::compat::Future01CompatExt as _;
 use futures_01;
+use futures_01::future::Future as _;
 use http::status::StatusCode;
 use log::{error, info, warn};
 use serde_derive::{Deserialize, Serialize};
@@ -439,11 +440,11 @@ async fn probe(
             info!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| tablebases.probe(&pos).map(Json))
-    }));
+    let future = futures_01::future::poll_fn(|| {
+        tokio_threadpool::blocking(|| tablebases.probe(&pos))
+    }).then(|r| r.expect("tokio threadpool")).compat();
 
-    Ok(await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")?)
+    Ok(await!(future).map(Json)?)
 }
 
 async fn mainline(
@@ -463,11 +464,11 @@ async fn mainline(
             info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| tablebases.mainline(pos.clone()).map(Json))
-    }));
+    let future = futures_01::future::poll_fn(|| {
+        tokio_threadpool::blocking(|| tablebases.mainline(pos.clone()))
+    }).then(|r| r.expect("tokio threadpool")).compat();
 
-    Ok(await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")?)
+    Ok(await!(future).map(Json)?)
 }
 
 #[derive(StructOpt, Debug)]
