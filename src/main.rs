@@ -364,6 +364,47 @@ impl Tablebases {
     }
 }
 
+enum TablebaseError {
+    ParseFenError(ParseFenError),
+    PositionError(PositionError),
+    SyzygyError(SyzygyError),
+}
+
+impl From<ParseFenError> for TablebaseError {
+    fn from(v: ParseFenError) -> TablebaseError {
+        TablebaseError::ParseFenError(v)
+    }
+}
+
+impl From<PositionError> for TablebaseError {
+    fn from(v: PositionError) -> TablebaseError {
+        TablebaseError::PositionError(v)
+    }
+}
+
+impl From<SyzygyError> for TablebaseError {
+    fn from(v: SyzygyError) -> TablebaseError {
+        TablebaseError::SyzygyError(v)
+    }
+}
+
+impl IntoResponse for TablebaseError {
+    fn into_response(self) -> http::response::Response<http_service::Body> {
+        match self {
+            TablebaseError::ParseFenError(_) =>
+                "invalid fen".with_status(StatusCode::BAD_REQUEST).into_response(),
+            TablebaseError::PositionError(_) =>
+                "illegal fen".with_status(StatusCode::BAD_REQUEST).into_response(),
+            TablebaseError::SyzygyError(SyzygyError::Castling) |
+            TablebaseError::SyzygyError(SyzygyError::TooManyPieces) |
+            TablebaseError::SyzygyError(SyzygyError::MissingTable { .. }) =>
+                "position not found in tablebases".with_status(StatusCode::NOT_FOUND).into_response(),
+            TablebaseError::SyzygyError(SyzygyError::ProbeFailed { .. }) =>
+                "probe failed".with_status(StatusCode::INTERNAL_SERVER_ERROR).into_response(),
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 struct Query {
     fen: String,
@@ -379,16 +420,9 @@ async fn probe(
     variant: Variant,
     AppData(tablebases): AppData<Tablebases>,
     QueryParams(query): QueryParams<Query>,
-) -> Result<Json<TablebaseResponse>, impl IntoResponse> {
-    let fen = match query.fen() {
-        Ok(fen) => fen,
-        Err(_) => return Err("fen invalid".with_status(StatusCode::BAD_REQUEST)),
-    };
-
-    let pos = match variant.position(&fen) {
-        Ok(pos) => pos,
-        Err(_) => return Err("fen illegal".with_status(StatusCode::BAD_REQUEST)),
-    };
+) -> Result<Json<TablebaseResponse>, TablebaseError> {
+    let fen = query.fen()?;
+    let pos = variant.position(&fen)?;
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -404,7 +438,7 @@ async fn probe(
             Ok(res) => Ok(Json(res)),
             Err(err) => {
                 error!("probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
-                Err("probe failed".with_status(StatusCode::INTERNAL_SERVER_ERROR))
+                Err(TablebaseError::from(err))
             }
         })
     }));
@@ -417,15 +451,8 @@ async fn mainline(
     AppData(tablebases): AppData<Tablebases>,
     QueryParams(query): QueryParams<Query>,
 ) -> Result<Json<MainlineResponse>, impl IntoResponse> {
-    let fen = match query.fen() {
-        Ok(fen) => fen,
-        Err(_) => return Err("fen invalid".with_status(StatusCode::BAD_REQUEST)),
-    };
-
-    let pos = match variant.position(&fen) {
-        Ok(pos) => pos,
-        Err(_) => return Err("fen illegal".with_status(StatusCode::BAD_REQUEST)),
-    };
+    let fen = query.fen()?;
+    let pos = variant.position(&fen)?;
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -439,13 +466,7 @@ async fn mainline(
     let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
         tokio_threadpool::blocking(|| match tablebases.mainline(pos.clone()) {
             Ok(res) => Ok(Json(res)),
-            Err(SyzygyError::Castling) | Err(SyzygyError::TooManyPieces) | Err(SyzygyError::MissingTable { .. }) => {
-                Err("position not found in tablebases".with_status(StatusCode::NOT_FOUND))
-            }
-            Err(err) => {
-                error!("mainline probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
-                Err("probe failed".with_status(StatusCode::INTERNAL_SERVER_ERROR))
-            }
+            Err(err) => Err(TablebaseError::from(err)),
         })
     }));
 
