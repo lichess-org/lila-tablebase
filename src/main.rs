@@ -364,6 +364,7 @@ impl Tablebases {
     }
 }
 
+#[derive(Debug)]
 enum TablebaseError {
     ParseFenError(ParseFenError),
     PositionError(PositionError),
@@ -395,12 +396,14 @@ impl IntoResponse for TablebaseError {
                 "invalid fen".with_status(StatusCode::BAD_REQUEST).into_response(),
             TablebaseError::PositionError(_) =>
                 "illegal fen".with_status(StatusCode::BAD_REQUEST).into_response(),
-            TablebaseError::SyzygyError(SyzygyError::Castling) |
-            TablebaseError::SyzygyError(SyzygyError::TooManyPieces) |
-            TablebaseError::SyzygyError(SyzygyError::MissingTable { .. }) =>
-                "position not found in tablebases".with_status(StatusCode::NOT_FOUND).into_response(),
-            TablebaseError::SyzygyError(SyzygyError::ProbeFailed { .. }) =>
-                "probe failed".with_status(StatusCode::INTERNAL_SERVER_ERROR).into_response(),
+            TablebaseError::SyzygyError(err @ SyzygyError::Castling) |
+            TablebaseError::SyzygyError(err @ SyzygyError::TooManyPieces) |
+            TablebaseError::SyzygyError(err @ SyzygyError::MissingTable { .. }) =>
+                err.to_string().with_status(StatusCode::NOT_FOUND).into_response(),
+            TablebaseError::SyzygyError(err @ SyzygyError::ProbeFailed { .. }) => {
+                error!("{}", err);
+                err.to_string().with_status(StatusCode::INTERNAL_SERVER_ERROR).into_response()
+            }
         }
     }
 }
@@ -434,23 +437,17 @@ async fn probe(
     }
 
     let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| match tablebases.probe(&pos) {
-            Ok(res) => Ok(Json(res)),
-            Err(err) => {
-                error!("probe failed: {} ({:?} position {})", err.to_string(), variant, fen);
-                Err(TablebaseError::from(err))
-            }
-        })
+        tokio_threadpool::blocking(|| tablebases.probe(&pos).map(Json))
     }));
 
-    await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")
+    Ok(await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")?)
 }
 
 async fn mainline(
     variant: Variant,
     AppData(tablebases): AppData<Tablebases>,
     QueryParams(query): QueryParams<Query>,
-) -> Result<Json<MainlineResponse>, impl IntoResponse> {
+) -> Result<Json<MainlineResponse>, TablebaseError> {
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
 
@@ -464,13 +461,10 @@ async fn mainline(
     }
 
     let f01 = futures_01::future::lazy(|| futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| match tablebases.mainline(pos.clone()) {
-            Ok(res) => Ok(Json(res)),
-            Err(err) => Err(TablebaseError::from(err)),
-        })
+        tokio_threadpool::blocking(|| tablebases.mainline(pos.clone()).map(Json))
     }));
 
-    await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")
+    Ok(await!(Future01CompatExt::compat(f01)).expect("tokio threadpool active")?)
 }
 
 #[derive(StructOpt, Debug)]
