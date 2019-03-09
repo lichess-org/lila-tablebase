@@ -397,13 +397,16 @@ impl IntoResponse for TablebaseError {
             TablebaseError::PositionError(_) =>
                 "illegal fen".with_status(StatusCode::BAD_REQUEST).into_response(),
             TablebaseError::SyzygyError(err @ SyzygyError::Castling) |
-            TablebaseError::SyzygyError(err @ SyzygyError::TooManyPieces) |
-            TablebaseError::SyzygyError(err @ SyzygyError::MissingTable { .. }) =>
+            TablebaseError::SyzygyError(err @ SyzygyError::TooManyPieces) =>
                 err.to_string().with_status(StatusCode::NOT_FOUND).into_response(),
+            TablebaseError::SyzygyError(err @ SyzygyError::MissingTable { .. }) => {
+                warn!("{}", err);
+                err.to_string().with_status(StatusCode::NOT_FOUND).into_response()
+            },
             TablebaseError::SyzygyError(err @ SyzygyError::ProbeFailed { .. }) => {
                 error!("{}", err);
                 err.to_string().with_status(StatusCode::INTERNAL_SERVER_ERROR).into_response()
-            }
+            },
         }
     }
 }
