@@ -24,7 +24,7 @@ use structopt::StructOpt;
 use tide::body::Json;
 use tide::configuration::Configuration;
 use tide::head::QueryParams;
-use tide::{App, AppData, IntoResponse};
+use tide::{App, AppData, IntoResponse, Response};
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
@@ -391,7 +391,7 @@ impl From<SyzygyError> for TablebaseError {
 }
 
 impl IntoResponse for TablebaseError {
-    fn into_response(self) -> http::response::Response<http_service::Body> {
+    fn into_response(self) -> Response {
         match self {
             TablebaseError::ParseFenError(_) =>
                 "invalid fen".with_status(StatusCode::BAD_REQUEST).into_response(),

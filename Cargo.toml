@@ -27,4 +27,3 @@ gaviota-sys = "0.1.6"
 arrayvec = { version = "0.4.10", features = ["serde-1"] }
 log = "0.4.6"
 env_logger = "0.6.1"
-http-service = "0.1.4"
