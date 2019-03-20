@@ -14,16 +14,16 @@ edition = "2018"
 
 [dependencies]
 tide = { git = "https://github.com/niklasf/tide.git", branch = "lila-tablebase" }
-serde_derive = "1.0.89"
-serde = "1.0.89"
-shakmaty = "0.13.1"
-http = "0.1.16"
-tokio-threadpool = "0.1.12"
+serde_derive = "1.0"
+serde = "1.0"
+shakmaty = "0.14"
+http = "0.1"
+tokio-threadpool = "0.1"
 futures-01 = { version = "0.1", package = "futures" }
 futures-preview = { version = "0.3.0-alpha.13", features = ["compat"] }
-structopt = "0.2.14"
-shakmaty-syzygy = "0.10.0"
-gaviota-sys = "0.1.6"
-arrayvec = { version = "0.4.10", features = ["serde-1"] }
-log = "0.4.6"
-env_logger = "0.6.1"
+structopt = "0.2"
+shakmaty-syzygy = "0.11"
+gaviota-sys = "0.1"
+arrayvec = { version = "0.4", features = ["serde-1"] }
+log = "0.4"
+env_logger = "0.6"
