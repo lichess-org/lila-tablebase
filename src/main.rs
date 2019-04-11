@@ -17,14 +17,14 @@ use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
+use std::net::SocketAddr;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tide::body::Json;
-use tide::configuration::Configuration;
-use tide::head::QueryParams;
-use tide::{App, AppData, IntoResponse, Response};
+use tide::response::IntoResponse;
+use tide::query::ExtractQuery;
+use tide::{App, Context, Response, response};
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
@@ -367,6 +367,7 @@ impl Tablebases {
 
 #[derive(Debug)]
 enum TablebaseError {
+    MissingFen,
     ParseFenError(ParseFenError),
     PositionError(PositionError),
     SyzygyError(SyzygyError),
@@ -393,6 +394,8 @@ impl From<SyzygyError> for TablebaseError {
 impl IntoResponse for TablebaseError {
     fn into_response(self) -> Response {
         match self {
+            TablebaseError::MissingFen =>
+                "missing fen".with_status(StatusCode::BAD_REQUEST).into_response(),
             TablebaseError::ParseFenError(_) =>
                 "invalid fen".with_status(StatusCode::BAD_REQUEST).into_response(),
             TablebaseError::PositionError(_) =>
@@ -423,13 +426,11 @@ impl Query {
     }
 }
 
-async fn probe(
-    variant: Variant,
-    AppData(tablebases): AppData<Tablebases>,
-    QueryParams(query): QueryParams<Query>,
-) -> Result<Json<TablebaseResponse>, TablebaseError> {
+async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
+    let query: Query = cx.query_params().ok_or(TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
+    let tbs = cx.app_data();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -441,19 +442,17 @@ async fn probe(
     }
 
     let future = futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| tablebases.probe(&pos))
+        tokio_threadpool::blocking(|| tbs.probe(&pos))
     }).then(|r| r.expect("tokio threadpool")).compat();
 
-    Ok(await!(future).map(Json)?)
+    Ok(await!(future).map(response::json)?)
 }
 
-async fn mainline(
-    variant: Variant,
-    AppData(tablebases): AppData<Tablebases>,
-    QueryParams(query): QueryParams<Query>,
-) -> Result<Json<MainlineResponse>, TablebaseError> {
+async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
+    let query: Query = cx.query_params().ok_or(TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
+    let tbs = cx.app_data();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -465,10 +464,10 @@ async fn mainline(
     }
 
     let future = futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| tablebases.mainline(pos.clone()))
+        tokio_threadpool::blocking(|| tbs.mainline(pos.clone()))
     }).then(|r| r.expect("tokio threadpool")).compat();
 
-    Ok(await!(future).map(Json)?)
+    Ok(await!(future).map(response::json)?)
 }
 
 #[derive(StructOpt, Debug)]
@@ -505,10 +504,7 @@ fn main() {
         return;
     }
 
-    let config = Configuration::build()
-        .address(opt.address)
-        .port(opt.port)
-        .finalize();
+    let bind = SocketAddr::new(opt.address.parse().expect("valid address"), opt.port);
 
     // Initialize Syzygy tablebases.
     let tablebases = {
@@ -550,12 +546,11 @@ fn main() {
 
     // Start server.
     let mut app = App::new(tablebases);
-    app.config(config);
-    app.at("/standard").get(|tbs, q| probe(Variant::Standard, tbs, q));
-    app.at("/standard/mainline").get(|tbs, q| mainline(Variant::Standard, tbs, q));
-    app.at("/atomic").get(|tbs, q| probe(Variant::Atomic, tbs, q));
-    app.at("/atomic/mainline").get(|tbs, q| mainline(Variant::Atomic, tbs, q));
-    app.at("/antichess").get(|tbs, q| probe(Variant::Antichess, tbs, q));
-    app.at("/antichess/mainline").get(|tbs, q| mainline(Variant::Antichess, tbs, q));
-    app.serve();
+    app.at("/standard").get(|cx| probe(Variant::Standard, cx));
+    app.at("/standard/mainline").get(|cx| mainline(Variant::Standard, cx));
+    app.at("/atomic").get(|cx| probe(Variant::Atomic, cx));
+    app.at("/atomic/mainline").get(|cx| mainline(Variant::Atomic, cx));
+    app.at("/antichess").get(|cx| probe(Variant::Antichess, cx));
+    app.at("/antichess/mainline").get(|cx| mainline(Variant::Antichess, cx));
+    app.serve(bind).expect("bind");
 }

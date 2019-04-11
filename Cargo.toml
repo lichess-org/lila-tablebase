@@ -13,7 +13,7 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2018"
 
 [dependencies]
-tide = { git = "https://github.com/niklasf/tide.git", branch = "lila-tablebase" }
+tide = { git = "https://github.com/niklasf/tide.git", branch = "extract-query" }
 serde_derive = "1.0"
 serde = "1.0"
 shakmaty = "0.14"
