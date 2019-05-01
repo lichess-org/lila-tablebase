@@ -13,14 +13,14 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2018"
 
 [dependencies]
-tide = { git = "https://github.com/niklasf/tide.git", branch = "extract-query" }
+tide = { git = "https://github.com/Nemo157/tide.git", branch = "futures-alpha.15" }
 serde_derive = "1.0"
 serde = "1.0"
 shakmaty = "0.14"
 http = "0.1"
 tokio-threadpool = "0.1"
 futures-01 = { version = "0.1", package = "futures" }
-futures-preview = { version = "0.3.0-alpha.13", features = ["compat"] }
+futures-preview = { version = "0.3.0-alpha.15", features = ["compat"] }
 structopt = "0.2"
 shakmaty-syzygy = "0.11"
 gaviota-sys = "0.1"

@@ -1,4 +1,4 @@
-#![feature(futures_api, async_await, await_macro)]
+#![feature(async_await, await_macro)]
 
 #![warn(rust_2018_idioms)]
 
@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use structopt::StructOpt;
 use tide::response::IntoResponse;
-use tide::query::ExtractQuery;
+use tide::querystring::ExtractQuery;
 use tide::{App, Context, Response, response};
 
 #[derive(Copy, Clone, Debug)]
@@ -427,7 +427,7 @@ impl Query {
 }
 
 async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
-    let query: Query = cx.query_params().ok_or(TablebaseError::MissingFen)?;
+    let query: Query = cx.url_query().map_err(|_| TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
     let tbs = cx.app_data();
@@ -449,7 +449,7 @@ async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, Ta
 }
 
 async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
-    let query: Query = cx.query_params().ok_or(TablebaseError::MissingFen)?;
+    let query: Query = cx.url_query().map_err(|_| TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
     let tbs = cx.app_data();
