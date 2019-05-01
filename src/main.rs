@@ -216,6 +216,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
 
 #[derive(Clone, Debug)]
 struct Tablebases {
+    sloppy_real_wdl: bool,
     standard: Arc<SyzygyTablebase<Chess>>,
     atomic: Arc<SyzygyTablebase<Atomic>>,
     antichess: Arc<SyzygyTablebase<Giveaway>>,
@@ -245,6 +246,11 @@ impl Tablebases {
 
         let halfmoves = min(101, pos.borrow().halfmoves()) as i32;
         let before_zeroing = dtz.add_plies(halfmoves);
+
+        if self.sloppy_real_wdl {
+            // Expensive disambiguation disabled.
+            return Ok(Wdl::from_dtz_after_zeroing(before_zeroing));
+        }
 
         if before_zeroing.0.abs() != 100 || halfmoves == 0 {
             // Unambiguous.
@@ -485,6 +491,13 @@ struct Opt {
     #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
 
+    /// Disable expensive search that resolves ambiguous WDLs.
+    ///
+    /// Results may be incorrect for positions with halfmove clock > 1 that are
+    /// on the edge of the 50-move rule.
+    #[structopt(long = "sloppy-real-wdl")]
+    sloppy_real_wdl: bool,
+
     /// Listen on this address.
     #[structopt(long = "address", default_value = "127.0.0.1")]
     address: String,
@@ -523,6 +536,7 @@ fn main() {
         }
 
         Tablebases {
+            sloppy_real_wdl: opt.sloppy_real_wdl,
             standard: Arc::new(standard),
             atomic: Arc::new(atomic),
             antichess: Arc::new(antichess),
