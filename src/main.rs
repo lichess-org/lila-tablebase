@@ -6,9 +6,8 @@ use arrayvec::ArrayVec;
 use futures::compat::Future01CompatExt as _;
 use futures_01;
 use futures_01::future::Future as _;
-use http::status::StatusCode;
 use log::{error, info, warn};
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
@@ -22,9 +21,10 @@ use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
 use structopt::StructOpt;
+use tide::{App, Context, Response, response};
+use tide::http::status::StatusCode;
 use tide::response::IntoResponse;
 use tide::querystring::ExtractQuery;
-use tide::{App, Context, Response, response};
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
