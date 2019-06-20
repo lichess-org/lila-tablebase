@@ -19,8 +19,9 @@ USAGE:
     lila-tablebase [OPTIONS]
 
 FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+    -h, --help               Prints help information
+        --sloppy-real-wdl    Disable expensive search that resolves ambiguous WDLs
+    -V, --version            Prints version information
 
 OPTIONS:
         --address <address>           Listen on this address. [default: 127.0.0.1]
@@ -33,6 +34,8 @@ OPTIONS:
 
 HTTP API
 --------
+
+Currently running with `--sloppy-real-wdl`.
 
 ### `GET /standard`
 
