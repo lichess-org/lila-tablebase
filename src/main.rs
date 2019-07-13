@@ -24,7 +24,7 @@ use structopt::StructOpt;
 use tide::{App, Context, Response, response};
 use tide::http::status::StatusCode;
 use tide::response::IntoResponse;
-use tide::querystring::ExtractQuery;
+use tide_querystring::ContextExt as _;
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
@@ -436,7 +436,7 @@ async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, Ta
     let query: Query = cx.url_query().map_err(|_| TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
-    let tbs = cx.app_data();
+    let tbs = cx.state();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -458,7 +458,7 @@ async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response,
     let query: Query = cx.url_query().map_err(|_| TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
-    let tbs = cx.app_data();
+    let tbs = cx.state();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -559,12 +559,12 @@ fn main() {
     }
 
     // Start server.
-    let mut app = App::new(tablebases);
+    let mut app = App::with_state(tablebases);
     app.at("/standard").get(|cx| probe(Variant::Standard, cx));
     app.at("/standard/mainline").get(|cx| mainline(Variant::Standard, cx));
     app.at("/atomic").get(|cx| probe(Variant::Atomic, cx));
     app.at("/atomic/mainline").get(|cx| mainline(Variant::Atomic, cx));
     app.at("/antichess").get(|cx| probe(Variant::Antichess, cx));
     app.at("/antichess/mainline").get(|cx| mainline(Variant::Antichess, cx));
-    app.serve(bind).expect("bind");
+    app.run(bind).expect("bind");
 }

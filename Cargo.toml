@@ -13,15 +13,19 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2018"
 
 [dependencies]
-tide = "0.2"
+tide = { git = "https://github.com/rustasync/tide.git" }
+tide-querystring = { git = "https://github.com/rustasync/tide.git" }
 serde = { version = "1.0", features = ["derive"] }
 structopt = "0.2"
-shakmaty = "0.14"
-shakmaty-syzygy = "0.11"
+shakmaty = "0.15"
+shakmaty-syzygy = "0.12"
 gaviota-sys = "0.1"
 futures-01 = { version = "0.1", package = "futures" }
-futures-preview = { version = "0.3.0-alpha.15", features = ["compat"] }
+futures-preview = { version = "0.3.0-alpha.17", features = ["compat"] }
 tokio-threadpool = "0.1"
 arrayvec = { version = "0.4", features = ["serde-1"] }
 log = "0.4"
 env_logger = "0.6"
+
+[patch.crates-io]
+http-service = { git = "https://github.com/rustasync/http-service", branch = "master" }
