@@ -26,6 +26,3 @@ tokio-threadpool = "0.1"
 arrayvec = { version = "0.4", features = ["serde-1"] }
 log = "0.4"
 env_logger = "0.6"
-
-[patch.crates-io]
-http-service = { git = "https://github.com/rustasync/http-service", branch = "master" }
