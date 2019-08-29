@@ -1,5 +1,3 @@
-#![feature(async_await, await_macro)]
-
 #![warn(rust_2018_idioms)]
 
 use arrayvec::ArrayVec;
@@ -451,7 +449,7 @@ async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, Ta
         tokio_threadpool::blocking(|| tbs.probe(&pos))
     }).then(|r| r.expect("tokio threadpool")).compat();
 
-    Ok(await!(future).map(response::json)?)
+    Ok(future.await.map(response::json)?)
 }
 
 async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
@@ -473,7 +471,7 @@ async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response,
         tokio_threadpool::blocking(|| tbs.mainline(pos.clone()))
     }).then(|r| r.expect("tokio threadpool")).compat();
 
-    Ok(await!(future).map(response::json)?)
+    Ok(future.await.map(response::json)?)
 }
 
 #[derive(StructOpt, Debug)]

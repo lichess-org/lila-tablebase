@@ -2,7 +2,7 @@ language: rust
 sudo: false
 
 rust:
- - nightly-2019-07-08
+ - nightly-2019-08-21
 
 before_script:
  - cargo install --force cargo-audit
