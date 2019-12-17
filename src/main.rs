@@ -1,9 +1,11 @@
 #![warn(rust_2018_idioms)]
 
+use async_std;
+use tide;
+use tide::{Response, IntoResponse, Request};
+use tide::http::status::StatusCode;
+
 use arrayvec::ArrayVec;
-use futures::compat::Future01CompatExt as _;
-use futures_01;
-use futures_01::future::Future as _;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use shakmaty::fen::{Fen, FenOpts, ParseFenError};
@@ -19,10 +21,6 @@ use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tide::{App, Context, Response, response};
-use tide::http::status::StatusCode;
-use tide::response::IntoResponse;
-use tide_querystring::ContextExt as _;
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
@@ -430,11 +428,11 @@ impl Query {
     }
 }
 
-async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
-    let query: Query = cx.url_query().map_err(|_| TablebaseError::MissingFen)?;
+fn try_probe(variant: Variant, req: Request<Tablebases>) -> Result<TablebaseResponse, TablebaseError> {
+    let query: Query = req.query().map_err(|_| TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
-    let tbs = cx.state();
+    let tbs = req.state();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -445,18 +443,21 @@ async fn probe(variant: Variant, cx: Context<Tablebases>) -> Result<Response, Ta
             info!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    let future = futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| tbs.probe(&pos))
-    }).then(|r| r.expect("tokio threadpool")).compat();
-
-    Ok(future.await.map(response::json)?)
+    Ok(tbs.probe(&pos)?)
 }
 
-async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response, TablebaseError> {
-    let query: Query = cx.url_query().map_err(|_| TablebaseError::MissingFen)?;
+async fn probe(variant: Variant, req: Request<Tablebases>) -> Response {
+    match try_probe(variant, req) {
+        Ok(res) => Response::new(200).body_json(&res).expect("body json"),
+        Err(err) => err.into_response(),
+    }
+}
+
+fn try_mainline(variant: Variant, req: Request<Tablebases>) -> Result<MainlineResponse, TablebaseError> {
+    let query: Query = req.query().map_err(|_| TablebaseError::MissingFen)?;
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
-    let tbs = cx.state();
+    let tbs = req.state();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -467,11 +468,14 @@ async fn mainline(variant: Variant, cx: Context<Tablebases>) -> Result<Response,
             info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    let future = futures_01::future::poll_fn(|| {
-        tokio_threadpool::blocking(|| tbs.mainline(pos.clone()))
-    }).then(|r| r.expect("tokio threadpool")).compat();
+    Ok(tbs.mainline(pos.clone())?)
+}
 
-    Ok(future.await.map(response::json)?)
+async fn mainline(variant: Variant, req: Request<Tablebases>) -> Response {
+    match try_mainline(variant, req) {
+        Ok(res) => Response::new(200).body_json(&res).expect("body json"),
+        Err(err) => err.into_response(),
+    }
 }
 
 #[derive(StructOpt, Debug)]
@@ -504,7 +508,8 @@ struct Opt {
     port: u16,
 }
 
-fn main() {
+#[async_std::main]
+async fn main() -> Result<(), std::io::Error> {
     env_logger::init();
 
     // Parse arguments.
@@ -512,7 +517,7 @@ fn main() {
     if opt.standard.is_empty() && opt.atomic.is_empty() && opt.antichess.is_empty() && opt.gaviota.is_empty() {
         Opt::clap().print_help().expect("usage");
         println!();
-        return;
+        return Ok(());
     }
 
     let bind = SocketAddr::new(opt.address.parse().expect("valid address"), opt.port);
@@ -557,12 +562,12 @@ fn main() {
     }
 
     // Start server.
-    let mut app = App::with_state(tablebases);
-    app.at("/standard").get(|cx| probe(Variant::Standard, cx));
-    app.at("/standard/mainline").get(|cx| mainline(Variant::Standard, cx));
-    app.at("/atomic").get(|cx| probe(Variant::Atomic, cx));
-    app.at("/atomic/mainline").get(|cx| mainline(Variant::Atomic, cx));
-    app.at("/antichess").get(|cx| probe(Variant::Antichess, cx));
-    app.at("/antichess/mainline").get(|cx| mainline(Variant::Antichess, cx));
-    app.run(bind).expect("bind");
+    let mut app = tide::with_state(tablebases);
+    app.at("/standard").get(|req| probe(Variant::Standard, req));
+    app.at("/standard/mainline").get(|req| mainline(Variant::Standard, req));
+    app.at("/atomic").get(|req| probe(Variant::Atomic, req));
+    app.at("/atomic/mainline").get(|req| mainline(Variant::Atomic, req));
+    app.at("/antichess").get(|req| probe(Variant::Antichess, req));
+    app.at("/antichess/mainline").get(|req| mainline(Variant::Antichess, req));
+    app.listen(bind).await
 }
