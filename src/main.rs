@@ -1,6 +1,7 @@
 #![warn(rust_2018_idioms)]
 
 use async_std;
+use async_std::task;
 use tide;
 use tide::{Response, IntoResponse, Request};
 use tide::http::status::StatusCode;
@@ -447,7 +448,7 @@ fn try_probe(variant: Variant, req: Request<Tablebases>) -> Result<TablebaseResp
 }
 
 async fn probe(variant: Variant, req: Request<Tablebases>) -> Response {
-    match try_probe(variant, req) {
+    match task::spawn_blocking(move || try_probe(variant, req)).await {
         Ok(res) => Response::new(200).body_json(&res).expect("body json"),
         Err(err) => err.into_response(),
     }
@@ -472,7 +473,7 @@ fn try_mainline(variant: Variant, req: Request<Tablebases>) -> Result<MainlineRe
 }
 
 async fn mainline(variant: Variant, req: Request<Tablebases>) -> Response {
-    match try_mainline(variant, req) {
+    match task::spawn_blocking(move || try_mainline(variant, req)).await {
         Ok(res) => Response::new(200).body_json(&res).expect("body json"),
         Err(err) => err.into_response(),
     }
