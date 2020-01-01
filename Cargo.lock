@@ -39,9 +39,9 @@ dependencies = [
 
 [[package]]
 name = "async-std"
-version = "1.3.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94ef4b71b2f56d7f8793c2a353fa0aa254833c55ab611dc6f3e0bd63db487e2d"
+checksum = "0bf6039b315300e057d198b9d3ab92ee029e31c759b7f1afae538145e6f18a3e"
 dependencies = [
  "async-attributes",
  "async-task",

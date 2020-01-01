@@ -22,5 +22,5 @@ gaviota-sys = "0.1"
 arrayvec = { version = "0.5", features = ["serde"] }
 log = "0.4"
 env_logger = "0.7"
-async-std = { version = "1.3", features = ["attributes"] }
+async-std = { version = "1.4", features = ["attributes"] }
 futures-intrusive = "0.2"
