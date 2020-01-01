@@ -430,6 +430,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-intrusive"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2c14b89bb14a9ec2f724a8cd9653b83b8e3f7ed510cc6129a36785dfe8cc9f1"
+dependencies = [
+ "futures-core",
+ "lock_api",
+ "parking_lot",
+]
+
+[[package]]
 name = "futures-io"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -745,6 +756,7 @@ dependencies = [
  "arrayvec",
  "async-std",
  "env_logger",
+ "futures-intrusive",
  "gaviota-sys",
  "log",
  "serde",

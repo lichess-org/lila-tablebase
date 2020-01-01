@@ -2,6 +2,7 @@
 
 use async_std;
 use async_std::task;
+use futures_intrusive::sync::Semaphore;
 use tide;
 use tide::{Response, IntoResponse, Request};
 use tide::http::status::StatusCode;
@@ -22,6 +23,15 @@ use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
 use std::sync::Arc;
 use structopt::StructOpt;
+
+macro_rules! enclose {
+    (($( $x:ident ),*) $y:expr) => {
+        {
+            $(let $x = $x.clone();)*
+            $y
+        }
+    };
+}
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
@@ -447,7 +457,9 @@ fn try_probe(variant: Variant, req: Request<Tablebases>) -> Result<TablebaseResp
     Ok(tbs.probe(&pos)?)
 }
 
-async fn probe(variant: Variant, req: Request<Tablebases>) -> Response {
+async fn probe(variant: Variant, semaphore: Arc<Semaphore>, req: Request<Tablebases>) -> Response {
+    let _guard = semaphore.acquire(1).await;
+
     match task::spawn_blocking(move || try_probe(variant, req)).await {
         Ok(res) => Response::new(200).body_json(&res).expect("body json"),
         Err(err) => err.into_response(),
@@ -472,7 +484,9 @@ fn try_mainline(variant: Variant, req: Request<Tablebases>) -> Result<MainlineRe
     Ok(tbs.mainline(pos.clone())?)
 }
 
-async fn mainline(variant: Variant, req: Request<Tablebases>) -> Response {
+async fn mainline(variant: Variant, semaphore: Arc<Semaphore>, req: Request<Tablebases>) -> Response {
+    let _guard = semaphore.acquire(1).await;
+
     match task::spawn_blocking(move || try_mainline(variant, req)).await {
         Ok(res) => Response::new(200).body_json(&res).expect("body json"),
         Err(err) => err.into_response(),
@@ -493,6 +507,11 @@ struct Opt {
     /// Directory with Gaviota tablebase files.
     #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
+
+    /// Limit concurrent tablebase probes. A good default is the number of
+    /// disks.
+    #[structopt(long = "disks", default_value = "5")]
+    disks: usize,
 
     /// Disable expensive search that resolves ambiguous WDLs.
     ///
@@ -564,11 +583,12 @@ async fn main() -> Result<(), std::io::Error> {
 
     // Start server.
     let mut app = tide::with_state(tablebases);
-    app.at("/standard").get(|req| probe(Variant::Standard, req));
-    app.at("/standard/mainline").get(|req| mainline(Variant::Standard, req));
-    app.at("/atomic").get(|req| probe(Variant::Atomic, req));
-    app.at("/atomic/mainline").get(|req| mainline(Variant::Atomic, req));
-    app.at("/antichess").get(|req| probe(Variant::Antichess, req));
-    app.at("/antichess/mainline").get(|req| mainline(Variant::Antichess, req));
+    let semaphore = Arc::new(Semaphore::new(true, opt.disks));
+    app.at("/standard").get(enclose!((semaphore) move |req| probe(Variant::Standard, semaphore.clone(), req)));
+    app.at("/standard/mainline").get(enclose!((semaphore) move |req| mainline(Variant::Standard, semaphore.clone(), req)));
+    app.at("/atomic").get(enclose!((semaphore) move |req| probe(Variant::Atomic, semaphore.clone(), req)));
+    app.at("/atomic/mainline").get(enclose!((semaphore) move |req| mainline(Variant::Atomic, semaphore.clone(), req)));
+    app.at("/antichess").get(enclose!((semaphore) move |req| probe(Variant::Antichess, semaphore.clone(), req)));
+    app.at("/antichess/mainline").get(enclose!((semaphore) move |req| mainline(Variant::Antichess, semaphore.clone(), req)));
     app.listen(bind).await
 }
