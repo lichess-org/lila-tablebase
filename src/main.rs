@@ -339,8 +339,8 @@ impl Tablebases {
             (Reverse(m.pos.stalemate), Reverse(m.pos.insufficient_material)),
             if m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw { Reverse(m.pos.dtm) } else { Reverse(None) },
             if m.pos.wdl.unwrap_or(Wdl::Draw) > Wdl::Draw { m.pos.dtm.map(Reverse) } else { None },
-            m.zeroing ^ (m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw),
-            m.capture.is_some() ^ (m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw),
+            m.zeroing ^ (m.pos.wdl.unwrap_or(Wdl::Draw) <= Wdl::Draw),
+            m.capture.is_some() ^ (m.pos.wdl.unwrap_or(Wdl::Draw) <= Wdl::Draw),
             m.pos.dtz.map(Reverse),
             (Reverse(m.capture), Reverse(m.promotion)),
         ));
