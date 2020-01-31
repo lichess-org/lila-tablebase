@@ -563,9 +563,8 @@ async fn main() -> Result<(), std::io::Error> {
 
     // Start server.
     let probe = warp::get()
-        .and(warp::any().map(move || tbs))
-        .and(warp::path::param())
-        .and(warp::path::end())
+        .map(move || tbs)
+        .and(warp::path!(Variant))
         .and(warp::query::query())
         .and_then(|tbs: &'static Tablebases, variant: Variant, query: Query| async move {
             tokio::task::spawn_blocking(move || {
@@ -576,10 +575,8 @@ async fn main() -> Result<(), std::io::Error> {
             }).await.expect("probe")
         });
     let mainline = warp::get()
-        .and(warp::any().map(move || tbs))
-        .and(warp::path::param())
-        .and(warp::path::path("mainline"))
-        .and(warp::path::end())
+        .map(move || tbs)
+        .and(warp::path!(Variant / "mainline"))
         .and(warp::query::query())
         .and_then(|tbs: &'static Tablebases, variant: Variant, query: Query| async move {
             tokio::task::spawn_blocking(move || {
