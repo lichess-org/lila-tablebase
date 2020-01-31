@@ -1,11 +1,7 @@
 #![warn(rust_2018_idioms)]
 
-use async_std;
-use async_std::task;
-use futures_intrusive::sync::Semaphore;
-use tide;
-use tide::{Response, IntoResponse, Request};
-use tide::http::status::StatusCode;
+use warp::Filter;
+use warp::http::StatusCode;
 
 use arrayvec::ArrayVec;
 use log::{error, info, warn};
@@ -21,23 +17,30 @@ use std::ffi::CString;
 use std::net::SocketAddr;
 use std::os::raw::{c_int, c_uchar, c_uint};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::str::FromStr;
 use structopt::StructOpt;
-
-macro_rules! enclose {
-    (($( $x:ident ),*) $y:expr) => {
-        {
-            $(let $x = $x.clone();)*
-            $y
-        }
-    };
-}
 
 #[derive(Copy, Clone, Debug)]
 enum Variant {
     Standard,
     Atomic,
     Antichess,
+}
+
+#[derive(Debug)]
+struct VariantNotFound;
+
+impl FromStr for Variant {
+    type Err = VariantNotFound;
+
+    fn from_str(s: &str) -> Result<Variant, VariantNotFound> {
+        Ok(match s {
+            "standard" => Variant::Standard,
+            "atomic" => Variant::Atomic,
+            "antichess" => Variant::Antichess,
+            _ => return Err(VariantNotFound),
+        })
+    }
 }
 
 impl Variant {
@@ -221,12 +224,12 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Tablebases {
     sloppy_real_wdl: bool,
-    standard: Arc<SyzygyTablebase<Chess>>,
-    atomic: Arc<SyzygyTablebase<Atomic>>,
-    antichess: Arc<SyzygyTablebase<Giveaway>>,
+    standard: SyzygyTablebase<Chess>,
+    atomic: SyzygyTablebase<Atomic>,
+    antichess: SyzygyTablebase<Giveaway>,
 }
 
 impl Tablebases {
@@ -380,7 +383,6 @@ impl Tablebases {
 
 #[derive(Debug)]
 enum TablebaseError {
-    MissingFen,
     ParseFenError(ParseFenError),
     PositionError(PositionError),
     SyzygyError(SyzygyError),
@@ -404,29 +406,29 @@ impl From<SyzygyError> for TablebaseError {
     }
 }
 
-impl IntoResponse for TablebaseError {
-    fn into_response(self) -> Response {
+impl TablebaseError {
+    fn to_response(&self) -> warp::reply::WithStatus<String> {
         match self {
-            TablebaseError::MissingFen =>
-                "missing fen".with_status(StatusCode::BAD_REQUEST).into_response(),
             TablebaseError::ParseFenError(_) =>
-                "invalid fen".with_status(StatusCode::BAD_REQUEST).into_response(),
+                warp::reply::with_status("invalid fen".to_owned(), StatusCode::BAD_REQUEST),
             TablebaseError::PositionError(_) =>
-                "illegal fen".with_status(StatusCode::BAD_REQUEST).into_response(),
+                warp::reply::with_status("illegal fen".to_owned(), StatusCode::BAD_REQUEST),
             TablebaseError::SyzygyError(err @ SyzygyError::Castling) |
             TablebaseError::SyzygyError(err @ SyzygyError::TooManyPieces) =>
-                err.to_string().with_status(StatusCode::NOT_FOUND).into_response(),
+                warp::reply::with_status(err.to_string(), StatusCode::NOT_FOUND),
             TablebaseError::SyzygyError(err @ SyzygyError::MissingTable { .. }) => {
                 warn!("{}", err);
-                err.to_string().with_status(StatusCode::NOT_FOUND).into_response()
+                warp::reply::with_status(err.to_string(), StatusCode::NOT_FOUND)
             },
             TablebaseError::SyzygyError(err @ SyzygyError::ProbeFailed { .. }) => {
                 error!("{}", err);
-                err.to_string().with_status(StatusCode::INTERNAL_SERVER_ERROR).into_response()
+                warp::reply::with_status(err.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
             },
         }
     }
 }
+
+impl warp::reject::Reject for TablebaseError { }
 
 #[derive(Deserialize, Debug)]
 struct Query {
@@ -439,11 +441,9 @@ impl Query {
     }
 }
 
-fn try_probe(variant: Variant, req: Request<Tablebases>) -> Result<TablebaseResponse, TablebaseError> {
-    let query: Query = req.query().map_err(|_| TablebaseError::MissingFen)?;
+fn try_probe(tbs: &Tablebases, variant: Variant, query: Query) -> Result<TablebaseResponse, TablebaseError> {
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
-    let tbs = req.state();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -457,20 +457,9 @@ fn try_probe(variant: Variant, req: Request<Tablebases>) -> Result<TablebaseResp
     Ok(tbs.probe(&pos)?)
 }
 
-async fn probe(variant: Variant, semaphore: Arc<Semaphore>, req: Request<Tablebases>) -> Response {
-    let _guard = semaphore.acquire(1).await;
-
-    match task::spawn_blocking(move || try_probe(variant, req)).await {
-        Ok(res) => Response::new(200).body_json(&res).expect("body json"),
-        Err(err) => err.into_response(),
-    }
-}
-
-fn try_mainline(variant: Variant, req: Request<Tablebases>) -> Result<MainlineResponse, TablebaseError> {
-    let query: Query = req.query().map_err(|_| TablebaseError::MissingFen)?;
+fn try_mainline(tbs: &Tablebases, variant: Variant, query: Query) -> Result<MainlineResponse, TablebaseError> {
     let fen = query.fen()?;
     let pos = variant.position(&fen)?;
-    let tbs = req.state();
 
     match pos {
         VariantPosition::Standard(ref pos) =>
@@ -481,16 +470,7 @@ fn try_mainline(variant: Variant, req: Request<Tablebases>) -> Result<MainlineRe
             info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
     }
 
-    Ok(tbs.mainline(pos.clone())?)
-}
-
-async fn mainline(variant: Variant, semaphore: Arc<Semaphore>, req: Request<Tablebases>) -> Response {
-    let _guard = semaphore.acquire(1).await;
-
-    match task::spawn_blocking(move || try_mainline(variant, req)).await {
-        Ok(res) => Response::new(200).body_json(&res).expect("body json"),
-        Err(err) => err.into_response(),
-    }
+    Ok(tbs.mainline(pos)?)
 }
 
 #[derive(StructOpt, Debug)]
@@ -528,7 +508,7 @@ struct Opt {
     port: u16,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     env_logger::init();
 
@@ -543,7 +523,7 @@ async fn main() -> Result<(), std::io::Error> {
     let bind = SocketAddr::new(opt.address.parse().expect("valid address"), opt.port);
 
     // Initialize Syzygy tablebases.
-    let tablebases = {
+    let tbs: &'static Tablebases = {
         let mut standard = SyzygyTablebase::<Chess>::new();
         let mut atomic = SyzygyTablebase::<Atomic>::new();
         let mut antichess = SyzygyTablebase::<Giveaway>::new();
@@ -558,12 +538,12 @@ async fn main() -> Result<(), std::io::Error> {
             antichess.add_directory(path).expect("open antichess directory");
         }
 
-        Tablebases {
+        Box::leak(Box::new(Tablebases {
             sloppy_real_wdl: opt.sloppy_real_wdl,
-            standard: Arc::new(standard),
-            atomic: Arc::new(atomic),
-            antichess: Arc::new(antichess),
-        }
+            standard,
+            atomic,
+            antichess,
+        }))
     };
 
     // Initialize Gaviota tablebase.
@@ -582,13 +562,39 @@ async fn main() -> Result<(), std::io::Error> {
     }
 
     // Start server.
-    let mut app = tide::with_state(tablebases);
-    let semaphore = Arc::new(Semaphore::new(true, opt.disks));
-    app.at("/standard").get(enclose!((semaphore) move |req| probe(Variant::Standard, semaphore.clone(), req)));
-    app.at("/standard/mainline").get(enclose!((semaphore) move |req| mainline(Variant::Standard, semaphore.clone(), req)));
-    app.at("/atomic").get(enclose!((semaphore) move |req| probe(Variant::Atomic, semaphore.clone(), req)));
-    app.at("/atomic/mainline").get(enclose!((semaphore) move |req| mainline(Variant::Atomic, semaphore.clone(), req)));
-    app.at("/antichess").get(enclose!((semaphore) move |req| probe(Variant::Antichess, semaphore.clone(), req)));
-    app.at("/antichess/mainline").get(enclose!((semaphore) move |req| mainline(Variant::Antichess, semaphore.clone(), req)));
-    app.listen(bind).await
+    let probe = warp::get()
+        .and(warp::any().map(move || tbs))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and(warp::query::query())
+        .and_then(|tbs: &'static Tablebases, variant: Variant, query: Query| async move {
+            tokio::task::spawn_blocking(move || {
+                match try_probe(tbs, variant, query) {
+                    Ok(res) => Ok(warp::reply::json(&res)),
+                    Err(err) => Err(warp::reject::custom(err)),
+                }
+            }).await.expect("probe")
+        });
+    let mainline = warp::get()
+        .and(warp::any().map(move || tbs))
+        .and(warp::path::param())
+        .and(warp::path::path("mainline"))
+        .and(warp::path::end())
+        .and(warp::query::query())
+        .and_then(|tbs: &'static Tablebases, variant: Variant, query: Query| async move {
+            tokio::task::spawn_blocking(move || {
+                match try_mainline(tbs, variant, query) {
+                    Ok(res) => Ok(warp::reply::json(&res)),
+                    Err(err) => Err(warp::reject::custom(err)),
+                }
+            }).await.expect("mainline")
+        });
+    let api = probe.or(mainline).recover(|rejection: warp::reject::Rejection| async move {
+        match rejection.find::<TablebaseError>() {
+            Some(err) => Ok(err.to_response()),
+            None => Err(rejection),
+        }
+    });
+    warp::serve(api).run(bind).await;
+    Ok(())
 }
