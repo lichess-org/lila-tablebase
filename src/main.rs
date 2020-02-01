@@ -512,7 +512,7 @@ struct Opt {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() {
     env_logger::init();
 
     // Parse arguments.
@@ -520,7 +520,7 @@ async fn main() -> Result<(), std::io::Error> {
     if opt.standard.is_empty() && opt.atomic.is_empty() && opt.antichess.is_empty() && opt.gaviota.is_empty() {
         Opt::clap().print_help().expect("usage");
         println!();
-        return Ok(());
+        return;
     }
 
     let bind = SocketAddr::new(opt.address.parse().expect("valid address"), opt.port);
@@ -599,5 +599,4 @@ async fn main() -> Result<(), std::io::Error> {
         }
     });
     warp::serve(api).run(bind).await;
-    Ok(())
 }
