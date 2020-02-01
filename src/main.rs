@@ -383,6 +383,7 @@ impl Tablebases {
 
 #[derive(Debug)]
 enum TablebaseError {
+    MissingFen,
     ParseFenError(ParseFenError),
     PositionError(PositionError),
     SyzygyError(SyzygyError),
@@ -409,6 +410,8 @@ impl From<SyzygyError> for TablebaseError {
 impl TablebaseError {
     fn to_response(&self) -> warp::reply::WithStatus<String> {
         match self {
+            TablebaseError::MissingFen =>
+                warp::reply::with_status("missing fen".to_owned(), StatusCode::BAD_REQUEST),
             TablebaseError::ParseFenError(_) =>
                 warp::reply::with_status("invalid fen".to_owned(), StatusCode::BAD_REQUEST),
             TablebaseError::PositionError(_) =>
@@ -587,9 +590,12 @@ async fn main() -> Result<(), std::io::Error> {
             }).await.expect("mainline")
         });
     let api = probe.or(mainline).recover(|rejection: warp::reject::Rejection| async move {
-        match rejection.find::<TablebaseError>() {
-            Some(err) => Ok(err.to_response()),
-            None => Err(rejection),
+        if rejection.find::<warp::reject::InvalidQuery>().is_some() {
+            Ok(TablebaseError::MissingFen.to_response())
+        } else if let Some(err) = rejection.find::<TablebaseError>() {
+            Ok(err.to_response())
+        } else {
+            Err(rejection)
         }
     });
     warp::serve(api).run(bind).await;
