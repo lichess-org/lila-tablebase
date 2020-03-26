@@ -1,5 +1,3 @@
-; example service file for systemd
-
 [Unit]
 Description=Tablebase server
 After=network.target
