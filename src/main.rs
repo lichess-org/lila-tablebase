@@ -491,11 +491,6 @@ struct Opt {
     #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
 
-    /// Limit concurrent tablebase probes. A good default is the number of
-    /// disks.
-    #[structopt(long = "disks", default_value = "5")]
-    disks: usize,
-
     /// Disable expensive search that resolves ambiguous WDLs.
     ///
     /// Results may be incorrect for positions with halfmove clock > 1 that are
@@ -511,7 +506,7 @@ struct Opt {
     port: u16,
 }
 
-#[tokio::main]
+#[tokio::main(core_threads=5)]
 async fn main() {
     env_logger::init();
 
