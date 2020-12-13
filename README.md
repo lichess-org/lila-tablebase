@@ -89,27 +89,27 @@ name | type | default | description
 
 ```javascript
 {
-  "dtz": 1
+  "dtz": 1,
   "mainline": [ // dtz mainline or empty if drawn
-    { "uci": "h7h8q", "dtz": -2 },
-    { "uci": "e8d7", "dtz": 1 },
-    { "uci": "h8h2", "dtz": -14 },
-    { "uci": "d7c6", "dtz": 13 },
-    { "uci": "h2e5", "dtz": -12 },
-    { "uci": "c6b6", "dtz": 11 },
-    { "uci": "g7f6", "dtz": -10 },
-    { "uci": "b6a6", "dtz": 9 },
-    { "uci": "e5b2", "dtz": -8 },
-    { "uci": "a6a5", "dtz": 7 },
-    { "uci": "f6e5", "dtz": -6 },
-    { "uci": "a5a4", "dtz": 5 },
-    { "uci": "e5d4", "dtz": -4 },
-    { "uci": "a4a5", "dtz": 3 },
-    { "uci": "d4c5", "dtz": -2 },
-    { "uci": "a5a4", "dtz": 1 },
-    { "uci": "b2a2", "dtz": -1 }
+    { "uci": "h7h8q", "san": "h8=Q+", "dtz": -2 },
+    { "uci": "e8d7", "san": "Kd7", "dtz": 1 },
+    { "uci": "h8h2", "san": "Qxh2", "dtz": -14 },
+    { "uci": "d7c6", "san": "Kc6", "dtz": 13 },
+    { "uci": "h2e5", "san": "Qe5", "dtz": -12 },
+    { "uci": "c6b6", "san": "Kb6", "dtz": 11 },
+    { "uci": "g7f6", "san": "Kf6", "dtz": -10 },
+    { "uci": "b6a6", "san": "Ka6", "dtz": 9 },
+    { "uci": "e5b2", "san": "Qb2", "dtz": -8 },
+    { "uci": "a6a5", "san": "Ka5", "dtz": 7 },
+    { "uci": "f6e5", "san": "Ke5", "dtz": -6 },
+    { "uci": "a5a4", "san": "Ka4", "dtz": 5 },
+    { "uci": "e5d4", "san": "Kd4", "dtz": -4 },
+    { "uci": "a4a5", "san": "Ka5", "dtz": 3 },
+    { "uci": "d4c5", "san": "Kc5", "dtz": -2 },
+    { "uci": "a5a4", "san": "Ka4", "dtz": 1 },
+    { "uci": "b2a2", "san": "Qa2#", "dtz": -1 }
   ],
-  "winner": "w", // (w) white, (b) black, (null) draw
+  "winner": "w" // (w) white, (b) black, (null) draw
 }
 ```
 

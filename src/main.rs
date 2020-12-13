@@ -78,12 +78,16 @@ impl VariantPosition {
         }
     }
 
-    fn san_plus(self, m: &Move) -> SanPlus {
+    fn san_plus_and_play_unchecked(&mut self, m: &Move) -> SanPlus {
         match self {
-            VariantPosition::Standard(pos) => SanPlus::from_move(pos, m),
-            VariantPosition::Atomic(pos) => SanPlus::from_move(pos, m),
-            VariantPosition::Antichess(pos) => SanPlus::from_move(pos, m),
+            VariantPosition::Standard(pos) => SanPlus::from_move_and_play_unchecked(pos, m),
+            VariantPosition::Atomic(pos) => SanPlus::from_move_and_play_unchecked(pos, m),
+            VariantPosition::Antichess(pos) => SanPlus::from_move_and_play_unchecked(pos, m),
         }
+    }
+
+    fn san_plus(mut self, m: &Move) -> SanPlus {
+        self.san_plus_and_play_unchecked(m)
     }
 }
 
@@ -161,6 +165,8 @@ struct MainlineResponse {
 struct MainlineStep {
     #[serde_as(as = "DisplayFromStr")]
     uci: Uci,
+    #[serde_as(as = "DisplayFromStr")]
+    san: SanPlus,
     #[serde(serialize_with = "into_i32")]
     dtz: Dtz,
 }
@@ -362,9 +368,8 @@ impl Tablebases {
                     mainline.push(MainlineStep {
                         uci: m.to_uci(pos.borrow().castles().mode()),
                         dtz,
+                        san: pos.san_plus_and_play_unchecked(&m),
                     });
-
-                    pos.borrow_mut().play_unchecked(&m);
                 } else {
                     break;
                 }
