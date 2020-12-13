@@ -10,8 +10,8 @@ use serde_with::{serde_as, DisplayFromStr};
 use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
-use shakmaty::variants::{Atomic, Chess, Giveaway};
-use shakmaty::{Move, MoveList, Outcome, Position, PositionError, Role, Setup};
+use shakmaty::variants::{Atomic, Chess, Antichess};
+use shakmaty::{CastlingMode, Move, MoveList, Outcome, Position, PositionErrorKinds, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
@@ -45,11 +45,11 @@ impl FromStr for Variant {
 }
 
 impl Variant {
-    fn position(self, fen: &Fen) -> Result<VariantPosition, PositionError> {
+    fn position(self, fen: &Fen) -> Result<VariantPosition, PositionErrorKinds> {
         match self {
-            Variant::Standard => fen.position().map(VariantPosition::Standard),
-            Variant::Atomic => fen.position().map(VariantPosition::Atomic),
-            Variant::Antichess => fen.position().map(VariantPosition::Antichess),
+            Variant::Standard => fen.position(CastlingMode::Chess960).map(VariantPosition::Standard).map_err(|e| e.kinds()),
+            Variant::Atomic => fen.position(CastlingMode::Chess960).map(VariantPosition::Atomic).map_err(|e| e.kinds()),
+            Variant::Antichess => fen.position(CastlingMode::Chess960).map(VariantPosition::Antichess).map_err(|e| e.kinds()),
         }
     }
 }
@@ -58,7 +58,7 @@ impl Variant {
 enum VariantPosition {
     Standard(Chess),
     Atomic(Atomic),
-    Antichess(Giveaway),
+    Antichess(Antichess),
 }
 
 impl VariantPosition {
@@ -75,14 +75,6 @@ impl VariantPosition {
             VariantPosition::Standard(ref mut pos) => pos,
             VariantPosition::Atomic(ref mut pos) => pos,
             VariantPosition::Antichess(ref mut pos) => pos,
-        }
-    }
-
-    fn uci(&self, m: &Move) -> Uci {
-        match *self {
-            VariantPosition::Standard(ref pos) => Uci::from_move(pos, m),
-            VariantPosition::Atomic(ref pos) => Uci::from_move(pos, m),
-            VariantPosition::Antichess(ref pos) => Uci::from_move(pos, m),
         }
     }
 
@@ -235,7 +227,7 @@ struct Tablebases {
     sloppy_real_wdl: bool,
     standard: SyzygyTablebase<Chess>,
     atomic: SyzygyTablebase<Atomic>,
-    antichess: SyzygyTablebase<Giveaway>,
+    antichess: SyzygyTablebase<Antichess>,
 }
 
 impl Tablebases {
@@ -333,7 +325,7 @@ impl Tablebases {
             after.borrow_mut().play_unchecked(m);
 
             Ok(MoveInfo {
-                uci: pos.uci(m),
+                uci: m.to_uci(pos.borrow().castles().mode()),
                 san: pos.clone().san_plus(m),
                 pos: self.position_info(&after)?,
                 capture: m.capture(),
@@ -368,7 +360,7 @@ impl Tablebases {
             while pos.borrow().halfmoves() < 100 {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
-                        uci: pos.uci(&m),
+                        uci: m.to_uci(pos.borrow().castles().mode()),
                         dtz,
                     });
 
@@ -391,7 +383,7 @@ impl Tablebases {
 enum TablebaseError {
     MissingFen,
     ParseFenError(ParseFenError),
-    PositionError(PositionError),
+    PositionError(PositionErrorKinds),
     SyzygyError(SyzygyError),
 }
 
@@ -401,8 +393,8 @@ impl From<ParseFenError> for TablebaseError {
     }
 }
 
-impl From<PositionError> for TablebaseError {
-    fn from(v: PositionError) -> TablebaseError {
+impl From<PositionErrorKinds> for TablebaseError {
+    fn from(v: PositionErrorKinds) -> TablebaseError {
         TablebaseError::PositionError(v)
     }
 }
@@ -530,7 +522,7 @@ async fn main() {
     let tbs: &'static Tablebases = {
         let mut standard = SyzygyTablebase::<Chess>::new();
         let mut atomic = SyzygyTablebase::<Atomic>::new();
-        let mut antichess = SyzygyTablebase::<Giveaway>::new();
+        let mut antichess = SyzygyTablebase::<Antichess>::new();
 
         for path in opt.standard {
             standard.add_directory(path).expect("open standard directory");
