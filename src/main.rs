@@ -6,6 +6,7 @@ use warp::http::StatusCode;
 use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
@@ -125,10 +126,13 @@ struct TablebaseResponse {
     moves: ArrayVec<[MoveInfo; 256]>,
 }
 
+#[serde_as]
 #[derive(Serialize, Debug)]
 struct MoveInfo {
-    uci: String,
-    san: String,
+    #[serde_as(as = "DisplayFromStr")]
+    uci: Uci,
+    #[serde_as(as = "DisplayFromStr")]
+    san: SanPlus,
     zeroing: bool,
     #[serde(skip)]
     capture: Option<Role>,
@@ -160,9 +164,11 @@ struct MainlineResponse {
     dtz: Dtz,
 }
 
+#[serde_as]
 #[derive(Serialize, Debug)]
 struct MainlineStep {
-    uci: String,
+    #[serde_as(as = "DisplayFromStr")]
+    uci: Uci,
     #[serde(serialize_with = "into_i32")]
     dtz: Dtz,
 }
@@ -327,8 +333,8 @@ impl Tablebases {
             after.borrow_mut().play_unchecked(m);
 
             Ok(MoveInfo {
-                uci: pos.uci(m).to_string(),
-                san: pos.clone().san_plus(m).to_string(),
+                uci: pos.uci(m),
+                san: pos.clone().san_plus(m),
                 pos: self.position_info(&after)?,
                 capture: m.capture(),
                 promotion: m.promotion(),
@@ -362,7 +368,7 @@ impl Tablebases {
             while pos.borrow().halfmoves() < 100 {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
-                        uci: pos.uci(&m).to_string(),
+                        uci: pos.uci(&m),
                         dtz,
                     });
 
