@@ -10,8 +10,8 @@ use serde_with::{serde_as, DisplayFromStr};
 use shakmaty::fen::{Fen, FenOpts, ParseFenError};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
-use shakmaty::variants::{Atomic, Chess, Antichess};
-use shakmaty::{CastlingMode, Move, MoveList, Outcome, Position, PositionErrorKinds, Role, Setup};
+use shakmaty::variant::{Atomic, Chess, Antichess};
+use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
@@ -323,10 +323,7 @@ impl Tablebases {
     }
 
     fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
-        let mut moves = MoveList::new();
-        pos.borrow().legal_moves(&mut moves);
-
-        let mut move_info = moves.iter().map(|m| {
+        let mut move_info = pos.borrow().legal_moves().iter().map(|m| {
             let mut after = pos.clone();
             after.borrow_mut().play_unchecked(m);
 
