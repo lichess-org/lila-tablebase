@@ -506,7 +506,7 @@ struct Opt {
     port: u16,
 }
 
-#[tokio::main(core_threads=5)]
+#[tokio::main]
 async fn main() {
     env_logger::init();
 

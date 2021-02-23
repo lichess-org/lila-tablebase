@@ -13,9 +13,9 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2018"
 
 [dependencies]
-warp = { version = "0.2", default-features = false }
-tokio = { version = "0.2", features = ["macros", "rt-threaded"] }
-serde = { version = "1.0", features = ["derive"] }
+warp = { version = "0.3", default-features = false }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
 structopt = "0.3"
 shakmaty = "0.18"
 shakmaty-syzygy = { version = "0.15", features = ["variant"] }
@@ -23,4 +23,4 @@ gaviota-sys = "0.1"
 arrayvec = { version = "0.5", features = ["serde"] }
 log = "0.4"
 env_logger = "0.8"
-serde_with = "1.6"
+serde_with = "1"
