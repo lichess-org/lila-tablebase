@@ -608,6 +608,7 @@ async fn main() {
                 let path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
                 paths = gaviota_sys::tbpaths_add(paths, path.as_ptr());
                 assert!(!paths.is_null());
+                drop(path);
             }
             assert!(!gaviota_sys::tb_init(1, gaviota_sys::TB_compression_scheme::tb_CP4 as c_int, paths).is_null());
         }
