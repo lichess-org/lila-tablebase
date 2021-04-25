@@ -119,7 +119,7 @@ where
 struct TablebaseResponse {
     #[serde(flatten)]
     pos: PositionInfo,
-    moves: ArrayVec<[MoveInfo; 256]>,
+    moves: ArrayVec<MoveInfo, 256>,
 }
 
 #[serde_as]
@@ -185,10 +185,10 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
         return None;
     }
 
-    let mut ws = ArrayVec::<[c_uint; 6]>::new();
-    let mut bs = ArrayVec::<[c_uint; 6]>::new();
-    let mut wp = ArrayVec::<[c_uchar; 6]>::new();
-    let mut bp = ArrayVec::<[c_uchar; 6]>::new();
+    let mut ws = ArrayVec::<c_uint, 6>::new();
+    let mut bs = ArrayVec::<c_uint, 6>::new();
+    let mut wp = ArrayVec::<c_uchar, 6>::new();
+    let mut bp = ArrayVec::<c_uchar, 6>::new();
 
     for (sq, piece) in pos.board().pieces() {
         piece.color.fold(&mut ws, &mut bs).push(c_uint::from(sq));
@@ -335,7 +335,7 @@ impl Tablebases {
                 promotion: m.promotion(),
                 zeroing: m.is_zeroing(),
             })
-        }).collect::<Result<ArrayVec<[_; 256]>, SyzygyError>>()?;
+        }).collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
 
         move_info.sort_by_key(|m: &MoveInfo| (
             (Reverse(m.pos.checkmate), Reverse(m.pos.variant_loss), m.pos.variant_win),
