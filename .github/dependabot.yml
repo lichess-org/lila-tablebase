@@ -1,28 +1,6 @@
 version: 2
 updates:
-- package-ecosystem: cargo
-  directory: "/"
-  schedule:
-    interval: monthly
-    time: "04:00"
-  open-pull-requests-limit: 10
-  ignore:
-  - dependency-name: serde_with
-    versions:
-    - 1.6.2
-  - dependency-name: warp
-    versions:
-    - 0.3.0
-  - dependency-name: tokio
-    versions:
-    - 0.2.25
-  - dependency-name: log
-    versions:
-    - 0.4.14
-  - dependency-name: serde
-    versions:
-    - 1.0.123
-  - dependency-name: shakmaty
-    versions:
-    - 0.17.1
-    - 0.17.2
+  - package-ecosystem: cargo
+    directory: '/'
+    schedule:
+      interval: monthly
