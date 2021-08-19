@@ -1,4 +1,4 @@
-#![warn(rust_2018_idioms)]
+#![forbid(unsafe_op_in_unsafe_fn)]
 
 use warp::Filter;
 use warp::http::StatusCode;
@@ -181,7 +181,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
         return None;
     }
 
-    if gaviota_sys::tb_is_initialized() == 0 {
+    if unsafe { gaviota_sys::tb_is_initialized() } == 0 {
         return None;
     }
 
@@ -203,16 +203,18 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let mut info: c_uint = 0;
     let mut plies: c_uint = 0;
 
-    let result = gaviota_sys::tb_probe_hard(
-        pos.turn().fold(gaviota_sys::TB_sides::tb_WHITE_TO_MOVE, gaviota_sys::TB_sides::tb_BLACK_TO_MOVE) as c_uint,
-        pos.ep_square().map_or(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint, c_uint::from),
-        gaviota_sys::TB_castling::tb_NOCASTLE.0,
-        ws.as_ptr(),
-        bs.as_ptr(),
-        wp.as_ptr(),
-        bp.as_ptr(),
-        &mut info as *mut c_uint,
-        &mut plies as *mut c_uint);
+    let result = unsafe {
+        gaviota_sys::tb_probe_hard(
+            pos.turn().fold(gaviota_sys::TB_sides::tb_WHITE_TO_MOVE, gaviota_sys::TB_sides::tb_BLACK_TO_MOVE) as c_uint,
+            pos.ep_square().map_or(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint, c_uint::from),
+            gaviota_sys::TB_castling::tb_NOCASTLE.0,
+            ws.as_ptr(),
+            bs.as_ptr(),
+            wp.as_ptr(),
+            bp.as_ptr(),
+            &mut info as *mut c_uint,
+            &mut plies as *mut c_uint)
+    };
 
     let plies = plies as i32;
 
