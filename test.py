@@ -40,6 +40,19 @@ class TablebaseTest(unittest.TestCase):
 
         self.assertEqual(r["moves"][2]["category"], "unknown")
 
+    def test_maybe_win(self):
+        r = standard("K7/2k5/3n4/8/2b5/8/8/8 w - - 97 128")
+        self.assertEqual(r["category"], "maybe-loss")
+        self.assertEqual(r["moves"][0]["san"], "Ka7")
+        self.assertEqual(r["moves"][0]["dtz"], 2)
+        self.assertEqual(r["moves"][0]["category"], "maybe-win")
+
+        r = standard("2n5/K1k5/8/8/2b5/8/8/8 w - - 99 129")
+        self.assertEqual(r["category"], "blessed-loss")
+        self.assertEqual(r["moves"][0]["san"], "Ka8")
+        self.assertEqual(r["moves"][0]["dtz"], 1)
+        self.assertEqual(r["moves"][0]["category"], "cursed-win")
+
 
 if __name__ == "__main__":
     unittest.main()
