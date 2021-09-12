@@ -47,7 +47,7 @@ name | type | default | description
 
 ```javascript
 {
-  "dtz": 1, // distance to zeroing or null if unknown
+  "dtz": 1, // dtz50'' with rounding or null if unknown
   "dtm": 17, // depth to mate or null if unknown
   "checkmate": false,
   "stalemate": false,
