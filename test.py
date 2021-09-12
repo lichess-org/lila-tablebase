@@ -53,6 +53,19 @@ class TablebaseTest(unittest.TestCase):
         self.assertEqual(r["moves"][0]["dtz"], 1)
         self.assertEqual(r["moves"][0]["category"], "cursed-win")
 
+    def test_blessed_loss(self):
+        r = standard("4K1k1/1N1P4/8/8/8/1q6/8/8 w - - 0 1")
+        self.assertEqual(r["category"], "blessed-loss")
+
+        self.assertEqual(r["moves"][0]["san"], "d8=N")
+        self.assertEqual(r["moves"][0]["category"], "cursed-win")
+
+        self.assertEqual(r["moves"][1]["san"], "Na5")
+        self.assertEqual(r["moves"][1]["category"], "win")
+
+        self.assertEqual(r["moves"][2]["san"], "Nc5")
+        self.assertEqual(r["moves"][2]["category"], "win")
+
 
 if __name__ == "__main__":
     unittest.main()
