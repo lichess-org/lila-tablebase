@@ -22,5 +22,5 @@ shakmaty-syzygy = { version = "0.16", features = ["variant"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 log = "0.4"
-env_logger = "0.8"
+env_logger = "0.9"
 serde_with = "1"
