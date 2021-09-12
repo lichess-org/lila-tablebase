@@ -63,9 +63,6 @@ class TablebaseTest(unittest.TestCase):
         self.assertEqual(r["moves"][1]["san"], "Na5")
         self.assertEqual(r["moves"][1]["category"], "win")
 
-        self.assertEqual(r["moves"][2]["san"], "Nc5")
-        self.assertEqual(r["moves"][2]["category"], "win")
-
     def test_unknown(self):
         r = standard("4K1k1/1N1P4/8/8/8/1q6/5PPP/8 w - - 0 1")
         self.assertEqual(r["category"], "unknown")
