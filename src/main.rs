@@ -119,7 +119,7 @@ where
 struct TablebaseResponse {
     #[serde(flatten)]
     pos: PositionInfo,
-    category: MoveCategory,
+    category: Category,
     moves: ArrayVec<MoveInfo, 256>,
 }
 
@@ -137,7 +137,7 @@ struct MoveInfo {
     promotion: Option<Role>,
     #[serde(flatten)]
     pos: PositionInfo,
-    category: MoveCategory,
+    category: Category,
 }
 
 #[derive(Serialize, Debug)]
@@ -155,57 +155,57 @@ struct PositionInfo {
 }
 
 impl PositionInfo {
-    fn move_category(&self, halfmoves_before: u32, zeroing: bool) -> MoveCategory {
+    fn category(&self, halfmoves_before: u32, zeroing: bool) -> Category {
         if !self.variant_win && !self.variant_loss && (self.stalemate || self.insufficient_material || self.dtz == Some(Dtz(0))) {
-            MoveCategory::Draw
+            Category::Draw
         } else if self.checkmate || self.variant_loss {
-            if halfmoves_before < 100 { MoveCategory::Win } else { MoveCategory::CursedWin }
+            if halfmoves_before < 100 { Category::Loss } else { Category::BlessedLoss }
         } else if self.variant_win {
-            if halfmoves_before < 100 { MoveCategory::Loss } else { MoveCategory::BlessedLoss }
+            if halfmoves_before < 100 { Category::Win } else { Category::CursedWin }
         } else if let Some(dtz) = self.dtz {
             let halfmoves_after = if zeroing { 0 } else { min(halfmoves_before, 100) + 1 };
             if halfmoves_before >= 100 || halfmoves_after >= 100 {
-                if dtz < Dtz(0) { MoveCategory::CursedWin } else { MoveCategory::BlessedLoss }
+                if dtz < Dtz(0) { Category::BlessedLoss } else { Category::CursedWin }
             } else {
                 let phase_dtz = dtz.add_plies(halfmoves_after as i32);
                 if phase_dtz < Dtz(-100) {
-                    MoveCategory::CursedWin
+                    Category::BlessedLoss
                 } else if phase_dtz == Dtz(-100) {
-                    if halfmoves_after == 0 { MoveCategory::Win } else { MoveCategory::MaybeWin }
+                    if halfmoves_after == 0 { Category::Loss } else { Category::MaybeLoss }
                 } else if phase_dtz < Dtz(0) {
-                    MoveCategory::Win
+                    Category::Loss
                 } else if phase_dtz < Dtz(100) {
-                    MoveCategory::Loss
+                    Category::Win
                 } else if phase_dtz == Dtz(100) {
-                    if halfmoves_after == 0 { MoveCategory::Loss } else { MoveCategory::MaybeLoss }
+                    if halfmoves_after == 0 { Category::Win } else { Category::MaybeWin }
                 } else {
-                    MoveCategory::BlessedLoss
+                    Category::CursedWin
                 }
             }
         } else {
-            MoveCategory::Unknown
+            Category::Unknown
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
-enum MoveCategory {
-    #[serde(rename = "win")]
-    Win,
-    #[serde(rename = "unknown")]
-    Unknown,
-    #[serde(rename = "maybe-win")]
-    MaybeWin,
-    #[serde(rename = "cursed-win")]
-    CursedWin,
-    #[serde(rename = "draw")]
-    Draw,
-    #[serde(rename = "blessed-loss")]
-    BlessedLoss,
-    #[serde(rename = "maybe-loss")]
-    MaybeLoss,
+enum Category {
     #[serde(rename = "loss")]
     Loss,
+    #[serde(rename = "maybe-loss")]
+    MaybeLoss,
+    #[serde(rename = "blessed-loss")]
+    BlessedLoss,
+    #[serde(rename = "draw")]
+    Draw,
+    #[serde(rename = "cursed-win")]
+    CursedWin,
+    #[serde(rename = "maybe-win")]
+    MaybeWin,
+    #[serde(rename = "unknown")]
+    Unknown,
+    #[serde(rename = "win")]
+    Win,
 }
 
 #[derive(Serialize, Debug)]
@@ -357,7 +357,7 @@ impl Tablebases {
                 capture: m.capture(),
                 promotion: m.promotion(),
                 zeroing: m.is_zeroing(),
-                category: after_info.move_category(halfmoves, m.is_zeroing()),
+                category: after_info.category(halfmoves, m.is_zeroing()),
                 pos: after_info,
             })
         }).collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
@@ -377,7 +377,7 @@ impl Tablebases {
         let pos_info = self.position_info(&pos)?;
 
         Ok(TablebaseResponse {
-            category: pos_info.move_category(halfmoves.saturating_sub(1), halfmoves == 0),
+            category: pos_info.category(halfmoves.saturating_sub(1), halfmoves == 0),
             pos: pos_info,
             moves: move_info,
         })
