@@ -14,6 +14,7 @@ use shakmaty::variant::{Atomic, Chess, Antichess};
 use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase};
 use std::cmp::{min, Reverse};
+use std::ops::Neg;
 use std::ffi::CString;
 use std::net::SocketAddr;
 use std::os::raw::{c_int, c_uchar, c_uint};
@@ -206,6 +207,23 @@ enum Category {
     Win,
 }
 
+impl Neg for Category {
+    type Output = Category;
+
+    fn neg(self) -> Category {
+        match self {
+            Category::Loss => Category::Win,
+            Category::Unknown => Category::Unknown,
+            Category::MaybeLoss => Category::MaybeWin,
+            Category::BlessedLoss => Category::CursedWin,
+            Category::Draw => Category::Draw,
+            Category::CursedWin => Category::BlessedLoss,
+            Category::MaybeWin => Category::MaybeLoss,
+            Category::Win => Category::Loss,
+        }
+    }
+}
+
 #[derive(Serialize, Debug)]
 struct MainlineResponse {
     mainline: Vec<MainlineStep>,
@@ -394,7 +412,7 @@ impl Tablebases {
 
         Ok(TablebaseResponse {
             pos: pos_info,
-            category,
+            category: move_info.first().map(|m| -m.category).unwrap_or(category),
             moves: move_info,
         })
     }
