@@ -136,6 +136,7 @@ struct MoveInfo {
     promotion: Option<Role>,
     #[serde(flatten)]
     pos: PositionInfo,
+    category: MoveCategory,
 }
 
 #[derive(Serialize, Debug)]
@@ -150,6 +151,60 @@ struct PositionInfo {
     #[serde(serialize_with = "into_i32_option")]
     dtz: Option<Dtz>,
     dtm: Option<i32>,
+}
+
+impl PositionInfo {
+    fn move_category(&self, halfmoves_before: u32, zeroing: bool) -> MoveCategory {
+        if !self.variant_win && !self.variant_loss && (self.stalemate || self.insufficient_material || self.dtz == Some(Dtz(0))) {
+            MoveCategory::Draw
+        } else if self.checkmate || self.variant_loss {
+            if halfmoves_before < 100 { MoveCategory::Win } else { MoveCategory::CursedWin }
+        } else if self.variant_win {
+            if halfmoves_before < 100 { MoveCategory::Loss } else { MoveCategory::BlessedLoss }
+        } else if let Some(dtz) = self.dtz {
+            let halfmoves_after = if zeroing { 0 } else { halfmoves_before + 1 };
+            if halfmoves_before >= 100 || halfmoves_after >= 100 {
+                if dtz < Dtz(0) { MoveCategory::CursedWin } else { MoveCategory::BlessedLoss }
+            } else {
+                let phase_dtz = dtz.add_plies(halfmoves_after as i32); // XXX
+                if phase_dtz < Dtz(-100) {
+                    MoveCategory::CursedWin
+                } else if phase_dtz == Dtz(-100) {
+                    if halfmoves_after == 0 { MoveCategory::Win } else { MoveCategory::MaybeWin }
+                } else if phase_dtz < Dtz(0) {
+                    MoveCategory::Win
+                } else if phase_dtz < Dtz(100) {
+                    MoveCategory::Loss
+                } else if phase_dtz == Dtz(100) {
+                    if halfmoves_after == 0 { MoveCategory::Loss } else { MoveCategory::MaybeLoss }
+                } else {
+                    MoveCategory::BlessedLoss
+                }
+            }
+        } else {
+            MoveCategory::Unknown
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Serialize)]
+enum MoveCategory {
+    #[serde(rename = "win")]
+    Win,
+    #[serde(rename = "unknown")]
+    Unknown,
+    #[serde(rename = "maybe-win")]
+    MaybeWin,
+    #[serde(rename = "cursed-win")]
+    CursedWin,
+    #[serde(rename = "draw")]
+    Draw,
+    #[serde(rename = "blessed-loss")]
+    BlessedLoss,
+    #[serde(rename = "maybe-loss")]
+    MaybeLoss,
+    #[serde(rename = "loss")]
+    Loss,
 }
 
 #[derive(Serialize, Debug)]
@@ -291,13 +346,16 @@ impl Tablebases {
             let mut after = pos.clone();
             after.borrow_mut().play_unchecked(m);
 
+            let after_info = self.position_info(&after)?;
+
             Ok(MoveInfo {
                 uci: m.to_uci(pos.borrow().castles().mode()),
                 san: pos.clone().san_plus(m),
-                pos: self.position_info(&after)?,
                 capture: m.capture(),
                 promotion: m.promotion(),
                 zeroing: m.is_zeroing(),
+                category: after_info.move_category(pos.borrow().halfmoves(), m.is_zeroing()),
+                pos: after_info,
             })
         }).collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
 
