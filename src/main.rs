@@ -162,7 +162,7 @@ impl PositionInfo {
         } else if self.variant_win {
             if halfmoves_before < 100 { MoveCategory::Loss } else { MoveCategory::BlessedLoss }
         } else if let Some(dtz) = self.dtz {
-            let halfmoves_after = if zeroing { 0 } else { halfmoves_before + 1 };
+            let halfmoves_after = if zeroing { 0 } else { halfmoves_before + 1 /* XXX */};
             if halfmoves_before >= 100 || halfmoves_after >= 100 {
                 if dtz < Dtz(0) { MoveCategory::CursedWin } else { MoveCategory::BlessedLoss }
             } else {
