@@ -47,7 +47,6 @@ name | type | default | description
 
 ```javascript
 {
-  "wdl": 2, // (2) win, (1) cursed win, (0) draw, (-1) blessed loss, (-2) loss, (null) unknown
   "dtz": 1, // distance to zeroing or null if unknown
   "dtm": 17, // depth to mate or null if unknown
   "checkmate": false,
@@ -59,7 +58,6 @@ name | type | default | description
     {
       "uci": "h7h8q",
       "san": "h8=Q+",
-      "wdl": -2,
       "dtz": -2,
       "dtm": -16,
       "zeroing": true,

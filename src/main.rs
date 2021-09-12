@@ -12,7 +12,7 @@ use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
 use shakmaty::variant::{Atomic, Chess, Antichess};
 use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup};
-use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
+use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase};
 use std::cmp::{min, Reverse};
 use std::ffi::CString;
 use std::net::SocketAddr;
@@ -147,8 +147,6 @@ struct PositionInfo {
     variant_win: bool,
     variant_loss: bool,
     insufficient_material: bool,
-    #[serde(serialize_with = "into_i32_option")]
-    wdl: Option<Wdl>,
     #[serde(serialize_with = "into_i32_option")]
     dtz: Option<Dtz>,
     dtm: Option<i32>,
@@ -337,7 +335,6 @@ impl Tablebases {
             variant_loss,
             insufficient_material: pos.borrow().is_insufficient_material(),
             dtz,
-            wdl: dtz.map(Wdl::from_dtz_after_zeroing),
             dtm: unsafe { probe_dtm(pos) },
         })
     }
@@ -366,10 +363,10 @@ impl Tablebases {
             m.category,
             (Reverse(m.pos.checkmate), Reverse(m.pos.variant_loss), m.pos.variant_win),
             (Reverse(m.pos.stalemate), Reverse(m.pos.insufficient_material)),
-            if m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw { Reverse(m.pos.dtm) } else { Reverse(None) },
-            if m.pos.wdl.unwrap_or(Wdl::Draw) > Wdl::Draw { m.pos.dtm.map(Reverse) } else { None },
-            m.zeroing ^ (m.pos.wdl.unwrap_or(Wdl::Draw) <= Wdl::Draw),
-            m.capture.is_some() ^ (m.pos.wdl.unwrap_or(Wdl::Draw) <= Wdl::Draw),
+            if m.pos.dtz.unwrap_or(Dtz(0)) < Dtz(0) { Reverse(m.pos.dtm) } else { Reverse(None) },
+            if m.pos.dtz.unwrap_or(Dtz(0)) > Dtz(0) { m.pos.dtm.map(Reverse) } else { None },
+            m.zeroing ^ (m.pos.dtz.unwrap_or(Dtz(0)) <= Dtz(0)),
+            m.capture.is_some() ^ (m.pos.dtz.unwrap_or(Dtz(0)) <= Dtz(0)),
             m.pos.dtz.map(Reverse),
             (Reverse(m.capture), Reverse(m.promotion)),
         ));
