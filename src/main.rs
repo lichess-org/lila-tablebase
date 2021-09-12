@@ -371,7 +371,7 @@ impl Tablebases {
             (Reverse(m.capture), Reverse(m.promotion)),
         ));
 
-        let pos_info = self.position_info(&pos)?;
+        let pos_info = self.position_info(pos)?;
         let category = pos_info.category(halfmoves.saturating_sub(1), halfmoves == 0);
 
         // Use category of previous position to infer maybe-win / maybe-loss,
