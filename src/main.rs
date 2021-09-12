@@ -372,10 +372,29 @@ impl Tablebases {
         ));
 
         let pos_info = self.position_info(&pos)?;
+        let category = pos_info.category(halfmoves.saturating_sub(1), halfmoves == 0);
+
+        // Use category of previous position to infer maybe-win / maybe-loss,
+        // if possible.
+        for (prev, maybe, correct) in [
+            (Category::Win, Category::MaybeLoss, Category::Loss),
+            (Category::CursedWin, Category::MaybeLoss, Category::BlessedLoss),
+            (Category::BlessedLoss, Category::MaybeWin, Category::CursedWin),
+            (Category::Loss, Category::MaybeWin, Category::Win),
+        ] {
+            if category == prev {
+                for m in &mut move_info {
+                    if m.category != maybe {
+                        break;
+                    }
+                    m.category = correct;
+                }
+            }
+        }
 
         Ok(TablebaseResponse {
-            category: pos_info.category(halfmoves.saturating_sub(1), halfmoves == 0),
             pos: pos_info,
+            category,
             moves: move_info,
         })
     }
