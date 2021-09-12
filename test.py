@@ -71,6 +71,19 @@ class TablebaseTest(unittest.TestCase):
         self.assertEqual(r["category"], "unknown")
         self.assertEqual(r["moves"][0]["category"], "unknown")
 
+    def test_castling(self):
+        r = standard("4k3/5q2/8/8/8/8/8/R3K2R w KQ - 0 1")
+        self.assertEqual(r["category"], "unknown")
+        self.assertEqual(r["moves"][0]["category"], "unknown")
+        self.assertEqual(r["moves"][19]["category"], "draw")
+
+        r = standard("4k2q/5q2/8/8/8/8/8/R3K2R w K - 0 1")
+        self.assertEqual(r["category"], "win")
+        self.assertEqual(r["moves"][0]["san"], "Rxh8+")
+        self.assertEqual(r["moves"][0]["category"], "loss")
+        self.assertEqual(r["moves"][1]["category"], "unknown")
+        self.assertEqual(r["moves"][11]["category"], "win")
+
 
 if __name__ == "__main__":
     unittest.main()
