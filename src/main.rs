@@ -13,7 +13,7 @@ use shakmaty::uci::Uci;
 use shakmaty::variant::{Atomic, Chess, Antichess};
 use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
-use std::cmp::Reverse;
+use std::cmp::{min, Reverse};
 use std::ffi::CString;
 use std::net::SocketAddr;
 use std::os::raw::{c_int, c_uchar, c_uint};
@@ -119,6 +119,7 @@ where
 struct TablebaseResponse {
     #[serde(flatten)]
     pos: PositionInfo,
+    category: MoveCategory,
     moves: ArrayVec<MoveInfo, 256>,
 }
 
@@ -162,11 +163,11 @@ impl PositionInfo {
         } else if self.variant_win {
             if halfmoves_before < 100 { MoveCategory::Loss } else { MoveCategory::BlessedLoss }
         } else if let Some(dtz) = self.dtz {
-            let halfmoves_after = if zeroing { 0 } else { halfmoves_before + 1 /* XXX */};
+            let halfmoves_after = if zeroing { 0 } else { min(halfmoves_before, 100) + 1 };
             if halfmoves_before >= 100 || halfmoves_after >= 100 {
                 if dtz < Dtz(0) { MoveCategory::CursedWin } else { MoveCategory::BlessedLoss }
             } else {
-                let phase_dtz = dtz.add_plies(halfmoves_after as i32); // XXX
+                let phase_dtz = dtz.add_plies(halfmoves_after as i32);
                 if phase_dtz < Dtz(-100) {
                     MoveCategory::CursedWin
                 } else if phase_dtz == Dtz(-100) {
@@ -342,6 +343,8 @@ impl Tablebases {
     }
 
     fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
+        let halfmoves = pos.borrow().halfmoves();
+
         let mut move_info = pos.borrow().legal_moves().iter().map(|m| {
             let mut after = pos.clone();
             after.borrow_mut().play_unchecked(m);
@@ -354,7 +357,7 @@ impl Tablebases {
                 capture: m.capture(),
                 promotion: m.promotion(),
                 zeroing: m.is_zeroing(),
-                category: after_info.move_category(pos.borrow().halfmoves(), m.is_zeroing()),
+                category: after_info.move_category(halfmoves, m.is_zeroing()),
                 pos: after_info,
             })
         }).collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
@@ -371,8 +374,11 @@ impl Tablebases {
             (Reverse(m.capture), Reverse(m.promotion)),
         ));
 
+        let pos_info = self.position_info(&pos)?;
+
         Ok(TablebaseResponse {
-            pos: self.position_info(&pos)?,
+            category: pos_info.move_category(halfmoves.saturating_sub(1), halfmoves == 0),
+            pos: pos_info,
             moves: move_info,
         })
     }
