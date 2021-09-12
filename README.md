@@ -19,7 +19,6 @@ USAGE:
 
 FLAGS:
     -h, --help               Prints help information
-        --sloppy-real-wdl    Disable expensive search that resolves ambiguous WDLs
     -V, --version            Prints version information
 
 OPTIONS:
@@ -36,8 +35,6 @@ OPTIONS:
 HTTP API
 --------
 
-Currently running with `--sloppy-real-wdl`.
-
 ### `GET /standard`
 
 ```
@@ -46,7 +43,7 @@ curl http://tablebase.lichess.ovh/standard?fen=4k3/6KP/8/8/8/8/7p/8_w_-_-_0_1
 
 name | type | default | description
 --- | --- | --- | ---
-**fen** | string | *required* | FEN of the position. Underscores allowed. The halfmove clock is taken into account for WDL values.
+**fen** | string | *required* | FEN of the position. Underscores allowed. The halfmove clock is *not* taken into account.
 
 ```javascript
 {

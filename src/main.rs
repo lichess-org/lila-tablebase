@@ -13,7 +13,7 @@ use shakmaty::uci::Uci;
 use shakmaty::variant::{Atomic, Chess, Antichess};
 use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase, Wdl};
-use std::cmp::{min, Reverse};
+use std::cmp::Reverse;
 use std::ffi::CString;
 use std::net::SocketAddr;
 use std::os::raw::{c_int, c_uchar, c_uint};
@@ -232,7 +232,6 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
 
 #[derive(Debug)]
 struct Tablebases {
-    sloppy_real_wdl: bool,
     standard: SyzygyTablebase<Chess>,
     atomic: SyzygyTablebase<Atomic>,
     antichess: SyzygyTablebase<Antichess>,
@@ -255,37 +254,6 @@ impl Tablebases {
         }
     }
 
-    fn real_wdl(&self, pos: &VariantPosition, dtz: Dtz) -> Result<Wdl, SyzygyError> {
-        if let Some(outcome) = pos.borrow().outcome() {
-            return Ok(Wdl::from_outcome(outcome, pos.borrow().turn()));
-        }
-
-        let halfmoves = min(101, pos.borrow().halfmoves()) as i32;
-        let before_zeroing = dtz.add_plies(halfmoves);
-
-        if self.sloppy_real_wdl {
-            // Expensive disambiguation disabled.
-            return Ok(Wdl::from_dtz_after_zeroing(before_zeroing));
-        }
-
-        if before_zeroing.0.abs() != 100 || halfmoves == 0 {
-            // Unambiguous.
-            return Ok(Wdl::from_dtz_after_zeroing(before_zeroing));
-        }
-
-        if halfmoves == 1 && dtz.0.abs() == 99 {
-            // This could only be a cursed/blessed result if the real DTZ was
-            // 100 instead of 99. But tables with DTZ 100 will always
-            // store precise DTZ values, hence it could not have been 100.
-            return Ok(Wdl::from_dtz_after_zeroing(before_zeroing));
-        }
-
-        let best = self.best_move(pos)?.expect("has moves");
-        let mut after = pos.clone();
-        after.borrow_mut().play_unchecked(&best.0);
-        Ok(-self.real_wdl(&after, best.1)?)
-    }
-
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.borrow().variant_outcome() {
             Some(Outcome::Decisive { winner }) =>
@@ -306,12 +274,6 @@ impl Tablebases {
 
         let dtz = user_error_as_none(self.probe_dtz(pos))?;
 
-        let wdl = if let Some(dtz) = dtz {
-            user_error_as_none(self.real_wdl(pos, dtz))?
-        } else {
-            None
-        };
-
         Ok(PositionInfo {
             checkmate: pos.borrow().is_checkmate(),
             stalemate: pos.borrow().is_stalemate(),
@@ -319,7 +281,7 @@ impl Tablebases {
             variant_loss,
             insufficient_material: pos.borrow().is_insufficient_material(),
             dtz,
-            wdl,
+            wdl: dtz.map(Wdl::from_dtz_after_zeroing),
             dtm: unsafe { probe_dtm(pos) },
         })
     }
@@ -493,13 +455,6 @@ struct Opt {
     #[structopt(long = "gaviota", parse(from_os_str))]
     gaviota: Vec<PathBuf>,
 
-    /// Disable expensive search that resolves ambiguous WDLs.
-    ///
-    /// Results may be incorrect for positions with halfmove clock > 1 that are
-    /// on the edge of the 50-move rule.
-    #[structopt(long = "sloppy-real-wdl")]
-    sloppy_real_wdl: bool,
-
     /// Listen on this address.
     #[structopt(long = "address", default_value = "127.0.0.1")]
     address: String,
@@ -539,7 +494,6 @@ async fn main() {
         }
 
         Box::leak(Box::new(Tablebases {
-            sloppy_real_wdl: opt.sloppy_real_wdl,
             standard,
             atomic,
             antichess,
