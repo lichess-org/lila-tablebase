@@ -187,7 +187,7 @@ impl PositionInfo {
     }
 }
 
-#[derive(Copy, Clone, Debug, Serialize)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
 enum MoveCategory {
     #[serde(rename = "win")]
     Win,
@@ -360,8 +360,8 @@ impl Tablebases {
         }).collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
 
         move_info.sort_by_key(|m: &MoveInfo| (
+            m.category,
             (Reverse(m.pos.checkmate), Reverse(m.pos.variant_loss), m.pos.variant_win),
-            (Reverse(m.pos.wdl == Some(Wdl::Loss)), m.pos.wdl),
             (Reverse(m.pos.stalemate), Reverse(m.pos.insufficient_material)),
             if m.pos.wdl.unwrap_or(Wdl::Draw) < Wdl::Draw { Reverse(m.pos.dtm) } else { Reverse(None) },
             if m.pos.wdl.unwrap_or(Wdl::Draw) > Wdl::Draw { m.pos.dtm.map(Reverse) } else { None },
