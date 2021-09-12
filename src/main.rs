@@ -192,6 +192,8 @@ impl PositionInfo {
 enum Category {
     #[serde(rename = "loss")]
     Loss,
+    #[serde(rename = "unknown")]
+    Unknown,
     #[serde(rename = "maybe-loss")]
     MaybeLoss,
     #[serde(rename = "blessed-loss")]
@@ -202,8 +204,6 @@ enum Category {
     CursedWin,
     #[serde(rename = "maybe-win")]
     MaybeWin,
-    #[serde(rename = "unknown")]
-    Unknown,
     #[serde(rename = "win")]
     Win,
 }
