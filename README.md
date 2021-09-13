@@ -43,7 +43,7 @@ curl http://tablebase.lichess.ovh/standard?fen=4k3/6KP/8/8/8/8/7p/8_w_-_-_0_1
 
 name | type | default | description
 --- | --- | --- | ---
-**fen** | string | *required* | FEN of the position. Underscores allowed. The halfmove clock is *not* taken into account.
+**fen** | string | *required* | FEN of the position. Underscores allowed.
 
 ```javascript
 {
@@ -67,7 +67,7 @@ name | type | default | description
       "variant_win": false,
       "variant_loss": false,
       "insufficient_material": false,
-      "category": "loss"
+      "category": "loss" // loss, unknown, maybe-loss, blessed-loss, draw, cursed-win, maybe-win, win
     },
     // ...
   ]
@@ -82,7 +82,7 @@ curl http://tablebase.lichess.ovh/standard/mainline?fen=4k3/6KP/8/8/8/8/7p/8_w_-
 
 name | type | default | description
 --- | --- | --- | ---
-**fen** | string | *required* | FEN of the position. Underscores allowed. The halfmove clock is taken into account.
+**fen** | string | *required* | FEN of the position. Underscores allowed.
 
 ```javascript
 {
