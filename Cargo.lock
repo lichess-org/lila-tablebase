@@ -555,7 +555,7 @@ dependencies = [
  "log",
  "serde",
  "serde_with",
- "shakmaty",
+ "shakmaty 0.19.0",
  "shakmaty-syzygy",
  "structopt",
  "tokio",
@@ -959,10 +959,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "shakmaty-syzygy"
-version = "0.16.1"
+name = "shakmaty"
+version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843936b87a002da1b1ede40340064b31505ade6d848b735ccd43c9c7ca251948"
+checksum = "55200757d0b17ee743aa21b4b0f048210f56a39289fa6aa4d5a41b2c1bc021d0"
+dependencies = [
+ "arrayvec",
+ "bitflags",
+ "btoi",
+]
+
+[[package]]
+name = "shakmaty-syzygy"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "436854f28d1d94a7e41ade67dbe1a1ad8eb38e11f9ebf09867a8f407aa4a6c76"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -973,7 +984,7 @@ dependencies = [
  "once_cell",
  "positioned-io-preview",
  "rustc-hash",
- "shakmaty",
+ "shakmaty 0.20.2",
 ]
 
 [[package]]
