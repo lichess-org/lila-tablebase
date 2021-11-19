@@ -13,7 +13,7 @@ use std::{
 use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{
     fen::{fen, Fen, ParseFenError},
     san::SanPlus,
@@ -113,30 +113,6 @@ impl VariantPosition {
     }
 }
 
-/// Serialize a `T` (e.g. `Wdl`, `Dtz`) that can be converted to an integer.
-fn into_i32<T, S>(value: &T, s: S) -> Result<S::Ok, S::Error>
-where
-    T: Into<i32> + Clone,
-    S: serde::Serializer,
-{
-    s.serialize_i32(value.clone().into())
-}
-
-/// Serialize an `Option<T>` where `T` can be converted to an integer.
-///
-/// In the future https://github.com/serde-rs/serde/issues/723 might make this
-/// obsolete.
-fn into_i32_option<T, S>(value: &Option<T>, s: S) -> Result<S::Ok, S::Error>
-where
-    T: Into<i32> + Clone,
-    S: serde::Serializer,
-{
-    match value {
-        None => s.serialize_none(),
-        Some(value) => s.serialize_some(&value.clone().into()),
-    }
-}
-
 #[derive(Serialize, Debug)]
 struct TablebaseResponse {
     #[serde(flatten)]
@@ -162,6 +138,7 @@ struct MoveInfo {
     category: Category,
 }
 
+#[serde_as]
 #[derive(Serialize, Debug)]
 struct PositionInfo {
     checkmate: bool,
@@ -169,7 +146,7 @@ struct PositionInfo {
     variant_win: bool,
     variant_loss: bool,
     insufficient_material: bool,
-    #[serde(serialize_with = "into_i32_option")]
+    #[serde_as(as = "Option<FromInto<i32>>")]
     dtz: Option<Dtz>,
     dtm: Option<i32>,
 }
@@ -272,11 +249,12 @@ impl Neg for Category {
     }
 }
 
+#[serde_as]
 #[derive(Serialize, Debug)]
 struct MainlineResponse {
     mainline: Vec<MainlineStep>,
     winner: Option<char>,
-    #[serde(serialize_with = "into_i32")]
+    #[serde_as(as = "FromInto<i32>")]
     dtz: Dtz,
 }
 
@@ -287,7 +265,7 @@ struct MainlineStep {
     uci: Uci,
     #[serde_as(as = "DisplayFromStr")]
     san: SanPlus,
-    #[serde(serialize_with = "into_i32")]
+    #[serde_as(as = "FromInto<i32>")]
     dtz: Dtz,
 }
 
