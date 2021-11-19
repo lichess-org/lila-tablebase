@@ -7,11 +7,11 @@ use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use shakmaty::fen::{Fen, FenOpts, ParseFenError};
+use shakmaty::fen::{Fen, fen, ParseFenError};
 use shakmaty::san::SanPlus;
 use shakmaty::uci::Uci;
 use shakmaty::variant::{Atomic, Chess, Antichess};
-use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup};
+use shakmaty::{CastlingMode, Move, Outcome, Position, PositionErrorKinds, Role, Setup, PositionError};
 use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase};
 use std::cmp::{min, Reverse};
 use std::ops::Neg;
@@ -48,9 +48,28 @@ impl FromStr for Variant {
 impl Variant {
     fn position(self, fen: &Fen) -> Result<VariantPosition, PositionErrorKinds> {
         match self {
-            Variant::Standard => fen.position(CastlingMode::Chess960).map(VariantPosition::Standard).map_err(|e| e.kinds()),
-            Variant::Atomic => fen.position(CastlingMode::Chess960).map(VariantPosition::Atomic).map_err(|e| e.kinds()),
-            Variant::Antichess => fen.position(CastlingMode::Chess960).map(VariantPosition::Antichess).map_err(|e| e.kinds()),
+            Variant::Standard =>
+                fen.position(CastlingMode::Chess960)
+                    .or_else(PositionError::ignore_invalid_castling_rights)
+                    .or_else(PositionError::ignore_invalid_ep_square)
+                    .or_else(PositionError::ignore_impossible_check)
+                    .map(VariantPosition::Standard)
+                    .map_err(|e| e.kinds()),
+            Variant::Atomic =>
+                fen.position(CastlingMode::Chess960)
+                    .or_else(PositionError::ignore_invalid_castling_rights)
+                    .or_else(PositionError::ignore_invalid_ep_square)
+                    .or_else(PositionError::ignore_impossible_check)
+                    .map(VariantPosition::Atomic)
+                    .map_err(|e| e.kinds()),
+            Variant::Antichess =>
+                fen.position(CastlingMode::Chess960)
+                    .or_else(PositionError::ignore_invalid_castling_rights)
+                    .or_else(PositionError::ignore_invalid_ep_square)
+                    .or_else(PositionError::ignore_impossible_check)
+                    .map(VariantPosition::Antichess)
+                    .map_err(|e| e.kinds()),
+
         }
     }
 }
@@ -501,38 +520,38 @@ struct Query {
 }
 
 impl Query {
-    fn fen(&self) -> Result<Fen, ParseFenError> {
+    fn lax_fen(&self) -> Result<Fen, ParseFenError> {
         str::replace(&self.fen, '_', " ").parse()
     }
 }
 
 fn try_probe(tbs: &Tablebases, variant: Variant, query: Query) -> Result<TablebaseResponse, TablebaseError> {
-    let fen = query.fen()?;
-    let pos = variant.position(&fen)?;
+    let lax_fen = query.lax_fen()?;
+    let pos = variant.position(&lax_fen)?;
 
     match pos {
         VariantPosition::Standard(ref pos) =>
-            info!("standard: {}", FenOpts::default().fen(pos)),
+            info!("standard: {}", fen(pos)),
         VariantPosition::Atomic(ref pos) =>
-            info!("atomic: {}", FenOpts::default().fen(pos)),
+            info!("atomic: {}", fen(pos)),
         VariantPosition::Antichess(ref pos) =>
-            info!("antichess: {}", FenOpts::default().promoted(true).fen(pos)),
+            info!("antichess: {}", fen(pos)),
     }
 
     Ok(tbs.probe(&pos)?)
 }
 
 fn try_mainline(tbs: &Tablebases, variant: Variant, query: Query) -> Result<MainlineResponse, TablebaseError> {
-    let fen = query.fen()?;
-    let pos = variant.position(&fen)?;
+    let lax_fen = query.lax_fen()?;
+    let pos = variant.position(&lax_fen)?;
 
     match pos {
         VariantPosition::Standard(ref pos) =>
-            info!("standard mainline: {}", FenOpts::default().fen(pos)),
+            info!("standard mainline: {}", fen(pos)),
         VariantPosition::Atomic(ref pos) =>
-            info!("atomic mainline: {}", FenOpts::default().fen(pos)),
+            info!("atomic mainline: {}", fen(pos)),
         VariantPosition::Antichess(ref pos) =>
-            info!("antichess mainline: {}", FenOpts::default().promoted(true).fen(pos)),
+            info!("antichess mainline: {}", fen(pos)),
     }
 
     Ok(tbs.mainline(pos)?)
