@@ -154,10 +154,12 @@ struct PositionInfo {
     #[serde(skip)]
     dtz: Option<MaybeRounded<Dtz>>,
     dtm: Option<i32>,
+    #[serde(skip)]
+    halfmoves: u32,
 }
 
 impl PositionInfo {
-    fn category(&self, halfmoves_before: u32, zeroing: bool) -> Category {
+    fn category(&self, halfmoves_before: u32) -> Category {
         if !self.variant_win
             && !self.variant_loss
             && (self.stalemate
@@ -178,19 +180,8 @@ impl PositionInfo {
                 Category::CursedWin
             }
         } else if let Some(dtz) = self.dtz {
-            let halfmoves_after = if zeroing {
-                0
-            } else {
-                halfmoves_before.saturating_add(1)
-            };
-            if halfmoves_before >= 100 {
-                if dtz.is_negative() {
-                    Category::BlessedLoss
-                } else {
-                    Category::CursedWin
-                }
-            } else {
-                match AmbiguousWdl::from_dtz_and_halfmoves(dtz, halfmoves_after) {
+            if halfmoves_before < 100 {
+                match AmbiguousWdl::from_dtz_and_halfmoves(dtz, self.halfmoves) {
                     AmbiguousWdl::Win => Category::Win,
                     AmbiguousWdl::MaybeWin => Category::MaybeWin,
                     AmbiguousWdl::CursedWin => Category::CursedWin,
@@ -198,6 +189,12 @@ impl PositionInfo {
                     AmbiguousWdl::BlessedLoss => Category::BlessedLoss,
                     AmbiguousWdl::MaybeLoss => Category::MaybeLoss,
                     AmbiguousWdl::Loss => Category::Loss,
+                }
+            } else {
+                if dtz.is_negative() {
+                    Category::BlessedLoss
+                } else {
+                    Category::CursedWin
                 }
             }
         } else {
@@ -398,6 +395,7 @@ impl Tablebases {
             precise_dtz: dtz.and_then(MaybeRounded::precise),
             dtz,
             dtm: unsafe { probe_dtm(pos) },
+            halfmoves: pos.borrow().halfmoves(),
         })
     }
 
@@ -420,7 +418,7 @@ impl Tablebases {
                     capture: m.capture(),
                     promotion: m.promotion(),
                     zeroing: m.is_zeroing(),
-                    category: after_info.category(halfmoves, m.is_zeroing()),
+                    category: after_info.category(halfmoves),
                     pos: after_info,
                 })
             })
@@ -472,7 +470,7 @@ impl Tablebases {
         });
 
         let pos_info = self.position_info(pos)?;
-        let category = pos_info.category(halfmoves.saturating_sub(1), halfmoves == 0);
+        let category = pos_info.category(halfmoves.saturating_sub(1));
 
         // Use category of previous position to infer maybe-win / maybe-loss,
         // if possible.
