@@ -22,7 +22,7 @@ use shakmaty::{
     CastlingMode, Move, Outcome, Position, PositionError, PositionErrorKinds, Role, Setup,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
-use structopt::StructOpt;
+use clap::{Parser, IntoApp as _};
 use warp::{http::StatusCode, Filter};
 
 #[derive(Copy, Clone, Debug)]
@@ -634,26 +634,26 @@ fn try_mainline(
     Ok(tbs.mainline(pos)?)
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct Opt {
     /// Directory with tablebase files for standard chess.
-    #[structopt(long = "standard", parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     standard: Vec<PathBuf>,
     /// Directory with tablebase files for atomic chess.
-    #[structopt(long = "atomic", parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     atomic: Vec<PathBuf>,
     /// Directory with tablebase files for antichess.
-    #[structopt(long = "antichess", parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     antichess: Vec<PathBuf>,
     /// Directory with Gaviota tablebase files.
-    #[structopt(long = "gaviota", parse(from_os_str))]
+    #[clap(long, parse(from_os_str))]
     gaviota: Vec<PathBuf>,
 
     /// Listen on this address.
-    #[structopt(long = "address", default_value = "127.0.0.1")]
+    #[clap(long, default_value = "127.0.0.1")]
     address: String,
     /// Listen on this port.
-    #[structopt(long = "port", default_value = "9000")]
+    #[clap(long, default_value = "9000")]
     port: u16,
 }
 
@@ -662,13 +662,13 @@ async fn main() {
     env_logger::init();
 
     // Parse arguments.
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     if opt.standard.is_empty()
         && opt.atomic.is_empty()
         && opt.antichess.is_empty()
         && opt.gaviota.is_empty()
     {
-        Opt::clap().print_help().expect("usage");
+        Opt::into_app().print_help().expect("usage");
         println!();
         return;
     }
