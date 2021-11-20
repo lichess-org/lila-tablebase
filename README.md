@@ -10,26 +10,18 @@ Usage
 -----
 
 ```
-lila-tablebase 0.2.0
-Niklas Fiekas <niklas.fiekas@backscattering.de>
-A Syzygy tablebase server
+lila-tablebase
 
 USAGE:
     lila-tablebase [OPTIONS]
 
-FLAGS:
-    -h, --help               Prints help information
-    -V, --version            Prints version information
-
 OPTIONS:
-        --address <address>           Listen on this address. [default: 127.0.0.1]
-        --port <port>                 Listen on this port. [default: 9000]
-        --disks <disks>               Limit concurrent tablebase probes. A good default
-                                      is the number of disks. [default: 5]
-        --antichess <antichess>...    Directory with tablebase files for antichess.
-        --atomic <atomic>...          Directory with tablebase files for atomic chess.
-        --gaviota <gaviota>...        Directory with Gaviota tablebase files.
-        --standard <standard>...      Directory with tablebase files for standard chess.
+        --standard <STANDARD>...      Directory with tablebase files for standard chess
+        --antichess <ANTICHESS>...    Directory with tablebase files for antichess
+        --atomic <ATOMIC>...          Directory with tablebase files for atomic chess
+        --gaviota <GAVIOTA>...        Directory with Gaviota tablebase files
+        --bind <BIND>                 Listen on this socket address [default: 127.0.0.1:9000]
+    -h, --help                        Print help information
 ```
 
 HTTP API

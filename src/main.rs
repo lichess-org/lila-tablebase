@@ -649,12 +649,9 @@ struct Opt {
     #[clap(long, parse(from_os_str))]
     gaviota: Vec<PathBuf>,
 
-    /// Listen on this address.
-    #[clap(long, default_value = "127.0.0.1")]
-    address: String,
-    /// Listen on this port.
-    #[clap(long, default_value = "9000")]
-    port: u16,
+    /// Listen on this socket address.
+    #[clap(long, default_value = "127.0.0.1:9000")]
+    bind: SocketAddr,
 }
 
 #[tokio::main]
@@ -672,8 +669,6 @@ async fn main() {
         println!();
         return;
     }
-
-    let bind = SocketAddr::new(opt.address.parse().expect("valid address"), opt.port);
 
     // Initialize Syzygy tablebases.
     let tbs: &'static Tablebases = {
@@ -763,5 +758,5 @@ async fn main() {
                 Err(rejection)
             }
         });
-    warp::serve(api).run(bind).await;
+    warp::serve(api).run(opt.bind).await;
 }
