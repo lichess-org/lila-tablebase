@@ -643,16 +643,16 @@ fn try_mainline(
 #[derive(Parser, Debug)]
 struct Opt {
     /// Directory with tablebase files for standard chess.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
     standard: Vec<PathBuf>,
     /// Directory with tablebase files for atomic chess.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
     atomic: Vec<PathBuf>,
     /// Directory with tablebase files for antichess.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
     antichess: Vec<PathBuf>,
     /// Directory with Gaviota tablebase files.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
     gaviota: Vec<PathBuf>,
 
     /// Listen on this socket address.
