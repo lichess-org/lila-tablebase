@@ -148,7 +148,9 @@ struct PositionInfo {
     insufficient_material: bool,
     #[serde_as(as = "Option<FromInto<i32>>")]
     #[serde(rename = "dtz")]
-    rounded_dtz: Option<Dtz>,
+    maybe_rounded_dtz: Option<Dtz>,
+    #[serde_as(as = "Option<FromInto<i32>>")]
+    precise_dtz: Option<Dtz>,
     #[serde(skip)]
     dtz: Option<MaybeRounded<Dtz>>,
     dtm: Option<i32>,
@@ -388,7 +390,8 @@ impl Tablebases {
             variant_win,
             variant_loss,
             insufficient_material: pos.borrow().is_insufficient_material(),
-            rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
+            maybe_rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
+            precise_dtz: dtz.and_then(MaybeRounded::precise),
             dtz,
             dtm: unsafe { probe_dtm(pos) },
         })
@@ -459,7 +462,7 @@ impl Tablebases {
                         .dtz
                         .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                         .is_positive(),
-                m.pos.rounded_dtz.map(Reverse),
+                m.pos.maybe_rounded_dtz.map(Reverse),
                 (Reverse(m.capture), Reverse(m.promotion)),
             )
         });

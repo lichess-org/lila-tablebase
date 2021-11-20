@@ -48,6 +48,7 @@ name | type | default | description
 ```javascript
 {
   "dtz": 1, // dtz50'' with rounding or null if unknown
+  "precise_dtz": 1, // dtz50'' (only if guaranteed to be not rounded) or null if unknown
   "dtm": 17, // depth to mate or null if unknown
   "checkmate": false,
   "stalemate": false,
@@ -60,6 +61,7 @@ name | type | default | description
       "uci": "h7h8q",
       "san": "h8=Q+",
       "dtz": -2,
+      "precise_dtz": -2,
       "dtm": -16,
       "zeroing": true,
       "checkmate": false,
