@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::{
-    cmp::{min, Reverse},
+    cmp::Reverse,
     ffi::CString,
     net::SocketAddr,
     ops::Neg,
@@ -21,7 +21,7 @@ use shakmaty::{
     variant::{Antichess, Atomic, Chess},
     CastlingMode, Move, Outcome, Position, PositionError, PositionErrorKinds, Role, Setup,
 };
-use shakmaty_syzygy::{Dtz, SyzygyError, Tablebase as SyzygyTablebase};
+use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
 use structopt::StructOpt;
 use warp::{http::StatusCode, Filter};
 
@@ -147,7 +147,10 @@ struct PositionInfo {
     variant_loss: bool,
     insufficient_material: bool,
     #[serde_as(as = "Option<FromInto<i32>>")]
-    dtz: Option<Dtz>,
+    #[serde(rename = "dtz")]
+    rounded_dtz: Option<Dtz>,
+    #[serde(skip)]
+    dtz: Option<MaybeRounded<Dtz>>,
     dtm: Option<i32>,
 }
 
@@ -155,7 +158,9 @@ impl PositionInfo {
     fn category(&self, halfmoves_before: u32, zeroing: bool) -> Category {
         if !self.variant_win
             && !self.variant_loss
-            && (self.stalemate || self.insufficient_material || self.dtz == Some(Dtz(0)))
+            && (self.stalemate
+                || self.insufficient_material
+                || self.dtz.map_or(false, |dtz| dtz.is_zero()))
         {
             Category::Draw
         } else if self.checkmate || self.variant_loss {
@@ -174,36 +179,23 @@ impl PositionInfo {
             let halfmoves_after = if zeroing {
                 0
             } else {
-                min(halfmoves_before, 100) + 1
+                halfmoves_before.saturating_add(1)
             };
-            if halfmoves_before >= 100 || halfmoves_after >= 100 {
-                if dtz < Dtz(0) {
+            if halfmoves_before >= 100 {
+                if dtz.is_negative() {
                     Category::BlessedLoss
                 } else {
                     Category::CursedWin
                 }
             } else {
-                let phase_dtz = dtz.add_plies(halfmoves_after as i32);
-                if phase_dtz < Dtz(-100) {
-                    Category::BlessedLoss
-                } else if phase_dtz == Dtz(-100) {
-                    if halfmoves_after == 0 {
-                        Category::Loss
-                    } else {
-                        Category::MaybeLoss
-                    }
-                } else if phase_dtz < Dtz(0) {
-                    Category::Loss
-                } else if phase_dtz < Dtz(100) {
-                    Category::Win
-                } else if phase_dtz == Dtz(100) {
-                    if halfmoves_after == 0 {
-                        Category::Win
-                    } else {
-                        Category::MaybeWin
-                    }
-                } else {
-                    Category::CursedWin
+                match AmbiguousWdl::from_dtz_and_halfmoves(dtz, halfmoves_after) {
+                    AmbiguousWdl::Win => Category::Win,
+                    AmbiguousWdl::MaybeWin => Category::MaybeWin,
+                    AmbiguousWdl::CursedWin => Category::CursedWin,
+                    AmbiguousWdl::Draw => Category::Draw,
+                    AmbiguousWdl::BlessedLoss => Category::BlessedLoss,
+                    AmbiguousWdl::MaybeLoss => Category::MaybeLoss,
+                    AmbiguousWdl::Loss => Category::Loss,
                 }
             }
         } else {
@@ -351,7 +343,7 @@ struct Tablebases {
 }
 
 impl Tablebases {
-    fn probe_dtz(&self, pos: &VariantPosition) -> Result<Dtz, SyzygyError> {
+    fn probe_dtz(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
         match *pos {
             VariantPosition::Standard(ref pos) => self.standard.probe_dtz(pos),
             VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
@@ -359,7 +351,10 @@ impl Tablebases {
         }
     }
 
-    fn best_move(&self, pos: &VariantPosition) -> Result<Option<(Move, Dtz)>, SyzygyError> {
+    fn best_move(
+        &self,
+        pos: &VariantPosition,
+    ) -> Result<Option<(Move, MaybeRounded<Dtz>)>, SyzygyError> {
         match *pos {
             VariantPosition::Standard(ref pos) => self.standard.best_move(pos),
             VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos),
@@ -393,6 +388,7 @@ impl Tablebases {
             variant_win,
             variant_loss,
             insufficient_material: pos.borrow().is_insufficient_material(),
+            rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
             dtz,
             dtm: unsafe { probe_dtm(pos) },
         })
@@ -435,19 +431,35 @@ impl Tablebases {
                     Reverse(m.pos.stalemate),
                     Reverse(m.pos.insufficient_material),
                 ),
-                if m.pos.dtz.unwrap_or(Dtz(0)) < Dtz(0) {
+                if m.pos
+                    .dtz
+                    .unwrap_or(MaybeRounded::Precise(Dtz(0)))
+                    .is_negative()
+                {
                     Reverse(m.pos.dtm)
                 } else {
                     Reverse(None)
                 },
-                if m.pos.dtz.unwrap_or(Dtz(0)) > Dtz(0) {
+                if m.pos
+                    .dtz
+                    .unwrap_or(MaybeRounded::Precise(Dtz(0)))
+                    .is_positive()
+                {
                     m.pos.dtm.map(Reverse)
                 } else {
                     None
                 },
-                m.zeroing ^ (m.pos.dtz.unwrap_or(Dtz(0)) <= Dtz(0)),
-                m.capture.is_some() ^ (m.pos.dtz.unwrap_or(Dtz(0)) <= Dtz(0)),
-                m.pos.dtz.map(Reverse),
+                m.zeroing
+                    ^ !m.pos
+                        .dtz
+                        .unwrap_or(MaybeRounded::Precise(Dtz(0)))
+                        .is_positive(),
+                m.capture.is_some()
+                    ^ !m.pos
+                        .dtz
+                        .unwrap_or(MaybeRounded::Precise(Dtz(0)))
+                        .is_positive(),
+                m.pos.rounded_dtz.map(Reverse),
                 (Reverse(m.capture), Reverse(m.promotion)),
             )
         });
@@ -492,12 +504,12 @@ impl Tablebases {
         let dtz = self.probe_dtz(&pos)?;
         let mut mainline = Vec::new();
 
-        if dtz != Dtz(0) {
+        if !dtz.is_zero() {
             while pos.borrow().halfmoves() < 100 {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
                         uci: m.to_uci(pos.borrow().castles().mode()),
-                        dtz,
+                        dtz: dtz.ignore_rounding(),
                         san: pos.san_plus_and_play_unchecked(&m),
                     });
                 } else {
@@ -507,7 +519,7 @@ impl Tablebases {
         }
 
         Ok(MainlineResponse {
-            dtz,
+            dtz: dtz.ignore_rounding(),
             mainline,
             winner: pos
                 .borrow()

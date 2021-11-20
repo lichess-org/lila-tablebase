@@ -630,16 +630,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-integer"
-version = "0.1.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"
-dependencies = [
- "autocfg",
- "num-traits",
-]
-
-[[package]]
 name = "num-traits"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -941,15 +931,11 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "436854f28d1d94a7e41ade67dbe1a1ad8eb38e11f9ebf09867a8f407aa4a6c76"
 dependencies = [
  "arrayvec",
  "bitflags",
  "byteorder",
  "itertools",
- "lazy_static",
- "num-integer",
  "once_cell",
  "positioned-io-preview",
  "rustc-hash",
