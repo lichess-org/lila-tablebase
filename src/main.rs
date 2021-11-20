@@ -11,6 +11,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use clap::{IntoApp as _, Parser};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr, FromInto};
@@ -22,7 +23,6 @@ use shakmaty::{
     CastlingMode, Move, Outcome, Position, PositionError, PositionErrorKinds, Role, Setup,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
-use clap::{Parser, IntoApp as _};
 use warp::{http::StatusCode, Filter};
 
 #[derive(Copy, Clone, Debug)]
@@ -250,6 +250,8 @@ struct MainlineResponse {
     winner: Option<char>,
     #[serde_as(as = "FromInto<i32>")]
     dtz: Dtz,
+    #[serde_as(as = "Option<FromInto<i32>>")]
+    precise_dtz: Option<Dtz>,
 }
 
 #[serde_as]
@@ -261,6 +263,8 @@ struct MainlineStep {
     san: SanPlus,
     #[serde_as(as = "FromInto<i32>")]
     dtz: Dtz,
+    #[serde_as(as = "Option<FromInto<i32>>")]
+    precise_dtz: Option<Dtz>,
 }
 
 unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
@@ -513,6 +517,7 @@ impl Tablebases {
                     mainline.push(MainlineStep {
                         uci: m.to_uci(pos.borrow().castles().mode()),
                         dtz: dtz.ignore_rounding(),
+                        precise_dtz: dtz.precise(),
                         san: pos.san_plus_and_play_unchecked(&m),
                     });
                 } else {
@@ -523,6 +528,7 @@ impl Tablebases {
 
         Ok(MainlineResponse {
             dtz: dtz.ignore_rounding(),
+            precise_dtz: dtz.precise(),
             mainline,
             winner: pos
                 .borrow()
