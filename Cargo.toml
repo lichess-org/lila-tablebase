@@ -16,7 +16,7 @@ edition = "2018"
 warp = { version = "0.3", default-features = false }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-clap = "3.0.0-beta.5"
+clap = "3.0.0"
 shakmaty = "0.20"
 shakmaty-syzygy = { version = "0.18", features = ["variant"] }
 gaviota-sys = "0.1"
