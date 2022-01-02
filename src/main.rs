@@ -190,12 +190,10 @@ impl PositionInfo {
                     AmbiguousWdl::MaybeLoss => Category::MaybeLoss,
                     AmbiguousWdl::Loss => Category::Loss,
                 }
+            } else if dtz.is_negative() {
+                Category::BlessedLoss
             } else {
-                if dtz.is_negative() {
-                    Category::BlessedLoss
-                } else {
-                    Category::CursedWin
-                }
+                Category::CursedWin
             }
         } else {
             Category::Unknown
@@ -284,10 +282,10 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let mut bp = ArrayVec::<c_uchar, 6>::new();
 
     for (sq, piece) in pos.board().pieces() {
-        piece.color.fold(&mut ws, &mut bs).push(c_uint::from(sq));
+        piece.color.fold_wb(&mut ws, &mut bs).push(c_uint::from(sq));
         piece
             .color
-            .fold(&mut wp, &mut bp)
+            .fold_wb(&mut wp, &mut bp)
             .push(c_uchar::from(piece.role));
     }
 
@@ -301,7 +299,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
 
     let result = unsafe {
         gaviota_sys::tb_probe_hard(
-            pos.turn().fold(
+            pos.turn().fold_wb(
                 gaviota_sys::TB_sides::tb_WHITE_TO_MOVE,
                 gaviota_sys::TB_sides::tb_BLACK_TO_MOVE,
             ) as c_uint,
@@ -322,10 +320,10 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     match gaviota_sys::TB_return_values(info) {
         gaviota_sys::TB_return_values::tb_DRAW if result != 0 => Some(0),
         gaviota_sys::TB_return_values::tb_WMATE if result != 0 => {
-            Some(pos.turn().fold(plies, -plies))
+            Some(pos.turn().fold_wb(plies, -plies))
         }
         gaviota_sys::TB_return_values::tb_BMATE if result != 0 => {
-            Some(pos.turn().fold(-plies, plies))
+            Some(pos.turn().fold_wb(-plies, plies))
         }
         gaviota_sys::TB_return_values::tb_FORBID => None,
         _ => {
