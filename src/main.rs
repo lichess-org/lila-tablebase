@@ -591,15 +591,11 @@ impl TablebaseError {
 
 impl warp::reject::Reject for TablebaseError {}
 
+#[serde_as]
 #[derive(Deserialize, Debug)]
 struct Query {
-    fen: String,
-}
-
-impl Query {
-    fn lax_fen(&self) -> Result<Fen, ParseFenError> {
-        str::replace(&self.fen, '_', " ").parse()
-    }
+    #[serde_as(as = "DisplayFromStr")]
+    fen: Fen,
 }
 
 fn try_probe(
@@ -607,8 +603,7 @@ fn try_probe(
     variant: Variant,
     query: Query,
 ) -> Result<TablebaseResponse, TablebaseError> {
-    let lax_fen = query.lax_fen()?;
-    let pos = variant.position(&lax_fen)?;
+    let pos = variant.position(&query.fen)?;
 
     match pos {
         VariantPosition::Standard(ref pos) => info!("standard: {}", fen(pos)),
@@ -624,8 +619,7 @@ fn try_mainline(
     variant: Variant,
     query: Query,
 ) -> Result<MainlineResponse, TablebaseError> {
-    let lax_fen = query.lax_fen()?;
-    let pos = variant.position(&lax_fen)?;
+    let pos = variant.position(&query.fen)?;
 
     match pos {
         VariantPosition::Standard(ref pos) => info!("standard mainline: {}", fen(pos)),
