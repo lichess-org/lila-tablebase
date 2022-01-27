@@ -1,6 +1,8 @@
 lila-tablebase
 ==============
 
+[![Check](https://github.com/lichess-org/lila-tablebase/actions/workflows/check.yml/badge.svg)](https://github.com/lichess-org/lila-tablebase/actions/workflows/check.yml)
+
 Tablebase server for [lichess.org](https://tablebase.lichess.ovh),
 based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy).
 
