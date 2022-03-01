@@ -17,7 +17,7 @@ warp = { version = "0.3", default-features = false }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "3", features = ["derive"] }
-shakmaty = "0.20"
+shakmaty = "0.21"
 shakmaty-syzygy = { version = "0.18", features = ["variant"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
