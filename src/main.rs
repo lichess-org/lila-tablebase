@@ -527,43 +527,43 @@ impl Tablebases {
 
 #[derive(Debug)]
 enum TablebaseError {
-    ParseFenError(ParseFenError),
-    PositionError(PositionErrorKinds),
-    SyzygyError(SyzygyError),
+    Fen(ParseFenError),
+    Position(PositionErrorKinds),
+    Syzygy(SyzygyError),
 }
 
 impl From<ParseFenError> for TablebaseError {
     fn from(v: ParseFenError) -> TablebaseError {
-        TablebaseError::ParseFenError(v)
+        TablebaseError::Fen(v)
     }
 }
 
 impl From<PositionErrorKinds> for TablebaseError {
     fn from(v: PositionErrorKinds) -> TablebaseError {
-        TablebaseError::PositionError(v)
+        TablebaseError::Position(v)
     }
 }
 
 impl From<SyzygyError> for TablebaseError {
     fn from(v: SyzygyError) -> TablebaseError {
-        TablebaseError::SyzygyError(v)
+        TablebaseError::Syzygy(v)
     }
 }
 
 impl IntoResponse for TablebaseError {
     fn into_response(self) -> Response {
         (match self {
-            TablebaseError::ParseFenError(_) => (StatusCode::BAD_REQUEST, "invalid fen".to_owned()),
-            TablebaseError::PositionError(_) => (StatusCode::BAD_REQUEST, "illegal fen".to_owned()),
-            TablebaseError::SyzygyError(err @ SyzygyError::Castling)
-            | TablebaseError::SyzygyError(err @ SyzygyError::TooManyPieces) => {
+            TablebaseError::Fen(_) => (StatusCode::BAD_REQUEST, "invalid fen".to_owned()),
+            TablebaseError::Position(_) => (StatusCode::BAD_REQUEST, "illegal fen".to_owned()),
+            TablebaseError::Syzygy(err @ SyzygyError::Castling)
+            | TablebaseError::Syzygy(err @ SyzygyError::TooManyPieces) => {
                 (StatusCode::NOT_FOUND, err.to_string())
             }
-            TablebaseError::SyzygyError(err @ SyzygyError::MissingTable { .. }) => {
+            TablebaseError::Syzygy(err @ SyzygyError::MissingTable { .. }) => {
                 warn!("{}", err);
                 (StatusCode::NOT_FOUND, err.to_string())
             }
-            TablebaseError::SyzygyError(err @ SyzygyError::ProbeFailed { .. }) => {
+            TablebaseError::Syzygy(err @ SyzygyError::ProbeFailed { .. }) => {
                 error!("{}", err);
                 (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
             }
