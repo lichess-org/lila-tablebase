@@ -7,66 +7,56 @@ use std::{
     ops::Neg,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
-    str::FromStr,
 };
 
 use arrayvec::ArrayVec;
+use axum::{
+    extract::{Path, Query},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::get,
+    Json, Router,
+};
 use clap::{IntoApp as _, Parser};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{
-    fen::{fen, Fen, ParseFenError},
+    fen::{Fen, ParseFenError},
     san::SanPlus,
     uci::Uci,
     variant::{Antichess, Atomic, Chess},
-    CastlingMode, Move, Outcome, Position, PositionError, PositionErrorKinds, Role, Setup,
+    CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, PositionErrorKinds, Role,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
-use warp::{http::StatusCode, Filter};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Deserialize, Copy, Clone, Debug)]
+#[serde(rename_all = "lowercase")]
 enum Variant {
     Standard,
     Atomic,
     Antichess,
 }
 
-#[derive(Debug)]
-struct VariantNotFound;
-
-impl FromStr for Variant {
-    type Err = VariantNotFound;
-
-    fn from_str(s: &str) -> Result<Variant, VariantNotFound> {
-        Ok(match s {
-            "standard" => Variant::Standard,
-            "atomic" => Variant::Atomic,
-            "antichess" => Variant::Antichess,
-            _ => return Err(VariantNotFound),
-        })
-    }
-}
-
 impl Variant {
-    fn position(self, fen: &Fen) -> Result<VariantPosition, PositionErrorKinds> {
+    fn position(self, fen: Fen) -> Result<VariantPosition, PositionErrorKinds> {
         match self {
             Variant::Standard => fen
-                .position(CastlingMode::Chess960)
+                .into_position(CastlingMode::Chess960)
                 .or_else(PositionError::ignore_invalid_castling_rights)
                 .or_else(PositionError::ignore_invalid_ep_square)
                 .or_else(PositionError::ignore_impossible_check)
                 .map(VariantPosition::Standard)
                 .map_err(|e| e.kinds()),
             Variant::Atomic => fen
-                .position(CastlingMode::Chess960)
+                .into_position(CastlingMode::Chess960)
                 .or_else(PositionError::ignore_invalid_castling_rights)
                 .or_else(PositionError::ignore_invalid_ep_square)
                 .or_else(PositionError::ignore_impossible_check)
                 .map(VariantPosition::Atomic)
                 .map_err(|e| e.kinds()),
             Variant::Antichess => fen
-                .position(CastlingMode::Chess960)
+                .into_position(CastlingMode::Chess960)
                 .or_else(PositionError::ignore_invalid_castling_rights)
                 .or_else(PositionError::ignore_invalid_ep_square)
                 .or_else(PositionError::ignore_impossible_check)
@@ -281,7 +271,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let mut wp = ArrayVec::<c_uchar, 6>::new();
     let mut bp = ArrayVec::<c_uchar, 6>::new();
 
-    for (sq, piece) in pos.board().pieces() {
+    for (sq, piece) in pos.board().clone() {
         piece.color.fold_wb(&mut ws, &mut bs).push(c_uint::from(sq));
         piece
             .color
@@ -303,7 +293,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
                 gaviota_sys::TB_sides::tb_WHITE_TO_MOVE,
                 gaviota_sys::TB_sides::tb_BLACK_TO_MOVE,
             ) as c_uint,
-            pos.ep_square()
+            pos.ep_square(EnPassantMode::Legal)
                 .map_or(gaviota_sys::TB_squares::tb_NOSQUARE as c_uint, c_uint::from),
             gaviota_sys::TB_castling::tb_NOCASTLE.0,
             ws.as_ptr(),
@@ -537,7 +527,6 @@ impl Tablebases {
 
 #[derive(Debug)]
 enum TablebaseError {
-    MissingFen,
     ParseFenError(ParseFenError),
     PositionError(PositionErrorKinds),
     SyzygyError(SyzygyError),
@@ -561,39 +550,31 @@ impl From<SyzygyError> for TablebaseError {
     }
 }
 
-impl TablebaseError {
-    fn to_response(&self) -> warp::reply::WithStatus<String> {
-        match self {
-            TablebaseError::MissingFen => {
-                warp::reply::with_status("missing fen".to_owned(), StatusCode::BAD_REQUEST)
-            }
-            TablebaseError::ParseFenError(_) => {
-                warp::reply::with_status("invalid fen".to_owned(), StatusCode::BAD_REQUEST)
-            }
-            TablebaseError::PositionError(_) => {
-                warp::reply::with_status("illegal fen".to_owned(), StatusCode::BAD_REQUEST)
-            }
+impl IntoResponse for TablebaseError {
+    fn into_response(self) -> Response {
+        (match self {
+            TablebaseError::ParseFenError(_) => (StatusCode::BAD_REQUEST, "invalid fen".to_owned()),
+            TablebaseError::PositionError(_) => (StatusCode::BAD_REQUEST, "illegal fen".to_owned()),
             TablebaseError::SyzygyError(err @ SyzygyError::Castling)
             | TablebaseError::SyzygyError(err @ SyzygyError::TooManyPieces) => {
-                warp::reply::with_status(err.to_string(), StatusCode::NOT_FOUND)
+                (StatusCode::NOT_FOUND, err.to_string())
             }
             TablebaseError::SyzygyError(err @ SyzygyError::MissingTable { .. }) => {
                 warn!("{}", err);
-                warp::reply::with_status(err.to_string(), StatusCode::NOT_FOUND)
+                (StatusCode::NOT_FOUND, err.to_string())
             }
             TablebaseError::SyzygyError(err @ SyzygyError::ProbeFailed { .. }) => {
                 error!("{}", err);
-                warp::reply::with_status(err.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
             }
-        }
+        })
+        .into_response()
     }
 }
 
-impl warp::reject::Reject for TablebaseError {}
-
 #[serde_as]
 #[derive(Deserialize, Debug)]
-struct Query {
+struct TablebaseQuery {
     #[serde_as(as = "DisplayFromStr")]
     fen: Fen,
 }
@@ -601,33 +582,29 @@ struct Query {
 fn try_probe(
     tbs: &Tablebases,
     variant: Variant,
-    query: Query,
+    query: TablebaseQuery,
 ) -> Result<TablebaseResponse, TablebaseError> {
-    let pos = variant.position(&query.fen)?;
-
-    match pos {
-        VariantPosition::Standard(ref pos) => info!("standard: {}", fen(pos)),
-        VariantPosition::Atomic(ref pos) => info!("atomic: {}", fen(pos)),
-        VariantPosition::Antichess(ref pos) => info!("antichess: {}", fen(pos)),
+    match variant {
+        Variant::Standard => info!("standard: {}", &query.fen),
+        Variant::Atomic => info!("atomic: {}", &query.fen),
+        Variant::Antichess => info!("antichess: {}", &query.fen),
     }
 
-    Ok(tbs.probe(&pos)?)
+    Ok(tbs.probe(&variant.position(query.fen)?)?)
 }
 
 fn try_mainline(
     tbs: &Tablebases,
     variant: Variant,
-    query: Query,
+    query: TablebaseQuery,
 ) -> Result<MainlineResponse, TablebaseError> {
-    let pos = variant.position(&query.fen)?;
-
-    match pos {
-        VariantPosition::Standard(ref pos) => info!("standard mainline: {}", fen(pos)),
-        VariantPosition::Atomic(ref pos) => info!("atomic mainline: {}", fen(pos)),
-        VariantPosition::Antichess(ref pos) => info!("antichess mainline: {}", fen(pos)),
+    match variant {
+        Variant::Standard => info!("standard mainline: {}", &query.fen),
+        Variant::Atomic => info!("atomic mainline: {}", &query.fen),
+        Variant::Antichess => info!("antichess mainline: {}", &query.fen),
     }
 
-    Ok(tbs.mainline(pos)?)
+    Ok(tbs.mainline(variant.position(query.fen)?)?)
 }
 
 #[derive(Parser, Debug)]
@@ -661,7 +638,7 @@ async fn main() {
         && opt.antichess.is_empty()
         && opt.gaviota.is_empty()
     {
-        Opt::into_app().print_help().expect("usage");
+        Opt::command().print_help().expect("usage");
         println!();
         return;
     }
@@ -714,45 +691,32 @@ async fn main() {
         }
     }
 
-    // Start server.
-    let probe = warp::get()
-        .map(move || tbs)
-        .and(warp::path!(Variant))
-        .and(warp::query::query())
-        .and_then(
-            |tbs: &'static Tablebases, variant: Variant, query: Query| async move {
-                tokio::task::spawn_blocking(move || match try_probe(tbs, variant, query) {
-                    Ok(res) => Ok(warp::reply::json(&res)),
-                    Err(err) => Err(warp::reject::custom(err)),
-                })
-                .await
-                .expect("probe")
-            },
+    let app = Router::new()
+        .route(
+            "/:variant",
+            get(
+                move |Path(variant): Path<Variant>, Query(query): Query<TablebaseQuery>| async move {
+                    tokio::task::spawn_blocking(move || try_probe(tbs, variant, query))
+                        .await
+                        .expect("probe")
+                        .map(Json)
+                },
+            ),
+        )
+        .route(
+            "/:variant/mainline",
+            get(
+                move |Path(variant): Path<Variant>, Query(query): Query<TablebaseQuery>| async move {
+                    tokio::task::spawn_blocking(move || try_mainline(tbs, variant, query))
+                        .await
+                        .expect("mainline")
+                        .map(Json)
+                },
+            ),
         );
-    let mainline = warp::get()
-        .map(move || tbs)
-        .and(warp::path!(Variant / "mainline"))
-        .and(warp::query::query())
-        .and_then(
-            |tbs: &'static Tablebases, variant: Variant, query: Query| async move {
-                tokio::task::spawn_blocking(move || match try_mainline(tbs, variant, query) {
-                    Ok(res) => Ok(warp::reply::json(&res)),
-                    Err(err) => Err(warp::reject::custom(err)),
-                })
-                .await
-                .expect("mainline")
-            },
-        );
-    let api = probe
-        .or(mainline)
-        .recover(|rejection: warp::reject::Rejection| async move {
-            if rejection.find::<warp::reject::InvalidQuery>().is_some() {
-                Ok(TablebaseError::MissingFen.to_response())
-            } else if let Some(err) = rejection.find::<TablebaseError>() {
-                Ok(err.to_response())
-            } else {
-                Err(rejection)
-            }
-        });
-    warp::serve(api).run(opt.bind).await;
+
+    axum::Server::bind(&opt.bind)
+        .serve(app.into_make_service())
+        .await
+        .expect("bind");
 }
