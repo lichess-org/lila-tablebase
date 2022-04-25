@@ -13,7 +13,7 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2021"
 
 [dependencies]
-axum = "0.4"
+axum = "0.5"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "3", features = ["derive"] }
