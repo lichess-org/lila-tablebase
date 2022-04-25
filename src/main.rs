@@ -25,81 +25,35 @@ use shakmaty::{
     fen::{Fen, ParseFenError},
     san::SanPlus,
     uci::Uci,
-    variant::{Antichess, Atomic, Chess},
-    CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, PositionErrorKinds, Role,
+    variant::{Antichess, Atomic, Chess, Variant, VariantPosition},
+    CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, Role,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
 
 #[derive(Deserialize, Copy, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
-enum Variant {
+enum TablebaseVariant {
     Standard,
     Atomic,
     Antichess,
 }
 
-impl Variant {
-    fn position(self, fen: Fen) -> Result<VariantPosition, PositionErrorKinds> {
-        match self {
-            Variant::Standard => fen
-                .into_position(CastlingMode::Chess960)
-                .or_else(PositionError::ignore_invalid_castling_rights)
-                .or_else(PositionError::ignore_invalid_ep_square)
-                .or_else(PositionError::ignore_impossible_check)
-                .map(VariantPosition::Standard)
-                .map_err(|e| e.kinds()),
-            Variant::Atomic => fen
-                .into_position(CastlingMode::Chess960)
-                .or_else(PositionError::ignore_invalid_castling_rights)
-                .or_else(PositionError::ignore_invalid_ep_square)
-                .or_else(PositionError::ignore_impossible_check)
-                .map(VariantPosition::Atomic)
-                .map_err(|e| e.kinds()),
-            Variant::Antichess => fen
-                .into_position(CastlingMode::Chess960)
-                .or_else(PositionError::ignore_invalid_castling_rights)
-                .or_else(PositionError::ignore_invalid_ep_square)
-                .or_else(PositionError::ignore_impossible_check)
-                .map(VariantPosition::Antichess)
-                .map_err(|e| e.kinds()),
+impl From<TablebaseVariant> for Variant {
+    fn from(variant: TablebaseVariant) -> Variant {
+        match variant {
+            TablebaseVariant::Standard => Variant::Chess,
+            TablebaseVariant::Atomic => Variant::Atomic,
+            TablebaseVariant::Antichess => Variant::Antichess,
         }
     }
 }
 
-#[derive(Clone, Debug)]
-enum VariantPosition {
-    Standard(Chess),
-    Atomic(Atomic),
-    Antichess(Antichess),
-}
-
-impl VariantPosition {
-    fn borrow(&self) -> &dyn Position {
-        match *self {
-            VariantPosition::Standard(ref pos) => pos,
-            VariantPosition::Atomic(ref pos) => pos,
-            VariantPosition::Antichess(ref pos) => pos,
-        }
-    }
-
-    fn borrow_mut(&mut self) -> &mut dyn Position {
-        match *self {
-            VariantPosition::Standard(ref mut pos) => pos,
-            VariantPosition::Atomic(ref mut pos) => pos,
-            VariantPosition::Antichess(ref mut pos) => pos,
-        }
-    }
-
-    fn san_plus_and_play_unchecked(&mut self, m: &Move) -> SanPlus {
-        match self {
-            VariantPosition::Standard(pos) => SanPlus::from_move_and_play_unchecked(pos, m),
-            VariantPosition::Atomic(pos) => SanPlus::from_move_and_play_unchecked(pos, m),
-            VariantPosition::Antichess(pos) => SanPlus::from_move_and_play_unchecked(pos, m),
-        }
-    }
-
-    fn san_plus(mut self, m: &Move) -> SanPlus {
-        self.san_plus_and_play_unchecked(m)
+impl TablebaseVariant {
+    fn position(self, fen: Fen) -> Result<VariantPosition, PositionError<VariantPosition>> {
+        VariantPosition::from_setup(self.into(), fen.into_setup(), CastlingMode::Standard)
+            .or_else(PositionError::ignore_invalid_castling_rights)
+            .or_else(PositionError::ignore_invalid_ep_square)
+            .or_else(PositionError::ignore_impossible_check)
     }
 }
 
@@ -254,7 +208,7 @@ struct MainlineStep {
 
 unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let pos = match *pos {
-        VariantPosition::Standard(ref pos) => pos,
+        VariantPosition::Chess(ref pos) => pos,
         _ => return None,
     };
 
@@ -336,9 +290,10 @@ struct Tablebases {
 impl Tablebases {
     fn probe_dtz(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
         match *pos {
-            VariantPosition::Standard(ref pos) => self.standard.probe_dtz(pos),
+            VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos),
             VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
             VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos),
+            _ => unimplemented!("variant not supported"),
         }
     }
 
@@ -347,17 +302,16 @@ impl Tablebases {
         pos: &VariantPosition,
     ) -> Result<Option<(Move, MaybeRounded<Dtz>)>, SyzygyError> {
         match *pos {
-            VariantPosition::Standard(ref pos) => self.standard.best_move(pos),
+            VariantPosition::Chess(ref pos) => self.standard.best_move(pos),
             VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos),
             VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos),
+            _ => unimplemented!("variant not supported"),
         }
     }
 
     fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
-        let (variant_win, variant_loss) = match pos.borrow().variant_outcome() {
-            Some(Outcome::Decisive { winner }) => {
-                (winner == pos.borrow().turn(), winner != pos.borrow().turn())
-            }
+        let (variant_win, variant_loss) = match pos.variant_outcome() {
+            Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
             _ => (false, false),
         };
 
@@ -374,35 +328,34 @@ impl Tablebases {
         let dtz = user_error_as_none(self.probe_dtz(pos))?;
 
         Ok(PositionInfo {
-            checkmate: pos.borrow().is_checkmate(),
-            stalemate: pos.borrow().is_stalemate(),
+            checkmate: pos.is_checkmate(),
+            stalemate: pos.is_stalemate(),
             variant_win,
             variant_loss,
-            insufficient_material: pos.borrow().is_insufficient_material(),
+            insufficient_material: pos.is_insufficient_material(),
             maybe_rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
             precise_dtz: dtz.and_then(MaybeRounded::precise),
             dtz,
             dtm: unsafe { probe_dtm(pos) },
-            halfmoves: pos.borrow().halfmoves(),
+            halfmoves: pos.halfmoves(),
         })
     }
 
     fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
-        let halfmoves = pos.borrow().halfmoves();
+        let halfmoves = pos.halfmoves();
 
         let mut move_info = pos
-            .borrow()
             .legal_moves()
             .iter()
             .map(|m| {
                 let mut after = pos.clone();
-                after.borrow_mut().play_unchecked(m);
+                after.play_unchecked(m);
 
                 let after_info = self.position_info(&after)?;
 
                 Ok(MoveInfo {
-                    uci: m.to_uci(pos.borrow().castles().mode()),
-                    san: pos.clone().san_plus(m),
+                    uci: m.to_uci(pos.castles().mode()),
+                    san: SanPlus::from_move(pos.clone(), m),
                     capture: m.capture(),
                     promotion: m.promotion(),
                     zeroing: m.is_zeroing(),
@@ -498,13 +451,13 @@ impl Tablebases {
         let mut mainline = Vec::new();
 
         if !dtz.is_zero() {
-            while pos.borrow().halfmoves() < 100 {
+            while pos.halfmoves() < 100 {
                 if let Some((m, dtz)) = self.best_move(&pos)? {
                     mainline.push(MainlineStep {
-                        uci: m.to_uci(pos.borrow().castles().mode()),
+                        uci: m.to_uci(pos.castles().mode()),
                         dtz: dtz.ignore_rounding(),
                         precise_dtz: dtz.precise(),
-                        san: pos.san_plus_and_play_unchecked(&m),
+                        san: SanPlus::from_move_and_play_unchecked(&mut pos, &m),
                     });
                 } else {
                     break;
@@ -517,7 +470,6 @@ impl Tablebases {
             precise_dtz: dtz.precise(),
             mainline,
             winner: pos
-                .borrow()
                 .outcome()
                 .and_then(|o| o.winner())
                 .map(|winner| winner.char()),
@@ -528,7 +480,7 @@ impl Tablebases {
 #[derive(Debug)]
 enum TablebaseError {
     Fen(ParseFenError),
-    Position(PositionErrorKinds),
+    Position(PositionError<VariantPosition>),
     Syzygy(SyzygyError),
 }
 
@@ -538,8 +490,8 @@ impl From<ParseFenError> for TablebaseError {
     }
 }
 
-impl From<PositionErrorKinds> for TablebaseError {
-    fn from(v: PositionErrorKinds) -> TablebaseError {
+impl From<PositionError<VariantPosition>> for TablebaseError {
+    fn from(v: PositionError<VariantPosition>) -> TablebaseError {
         TablebaseError::Position(v)
     }
 }
@@ -553,8 +505,8 @@ impl From<SyzygyError> for TablebaseError {
 impl IntoResponse for TablebaseError {
     fn into_response(self) -> Response {
         (match self {
-            TablebaseError::Fen(_) => (StatusCode::BAD_REQUEST, "invalid fen".to_owned()),
-            TablebaseError::Position(_) => (StatusCode::BAD_REQUEST, "illegal fen".to_owned()),
+            TablebaseError::Fen(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+            TablebaseError::Position(err) => (StatusCode::BAD_REQUEST, err.to_string()),
             TablebaseError::Syzygy(err @ SyzygyError::Castling)
             | TablebaseError::Syzygy(err @ SyzygyError::TooManyPieces) => {
                 (StatusCode::NOT_FOUND, err.to_string())
@@ -581,13 +533,13 @@ struct TablebaseQuery {
 
 fn try_probe(
     tbs: &Tablebases,
-    variant: Variant,
+    variant: TablebaseVariant,
     query: TablebaseQuery,
 ) -> Result<TablebaseResponse, TablebaseError> {
     match variant {
-        Variant::Standard => info!("standard: {}", &query.fen),
-        Variant::Atomic => info!("atomic: {}", &query.fen),
-        Variant::Antichess => info!("antichess: {}", &query.fen),
+        TablebaseVariant::Standard => info!("standard: {}", &query.fen),
+        TablebaseVariant::Atomic => info!("atomic: {}", &query.fen),
+        TablebaseVariant::Antichess => info!("antichess: {}", &query.fen),
     }
 
     Ok(tbs.probe(&variant.position(query.fen)?)?)
@@ -595,13 +547,13 @@ fn try_probe(
 
 fn try_mainline(
     tbs: &Tablebases,
-    variant: Variant,
+    variant: TablebaseVariant,
     query: TablebaseQuery,
 ) -> Result<MainlineResponse, TablebaseError> {
     match variant {
-        Variant::Standard => info!("standard mainline: {}", &query.fen),
-        Variant::Atomic => info!("atomic mainline: {}", &query.fen),
-        Variant::Antichess => info!("antichess mainline: {}", &query.fen),
+        TablebaseVariant::Standard => info!("standard mainline: {}", &query.fen),
+        TablebaseVariant::Atomic => info!("atomic mainline: {}", &query.fen),
+        TablebaseVariant::Antichess => info!("antichess mainline: {}", &query.fen),
     }
 
     Ok(tbs.mainline(variant.position(query.fen)?)?)
@@ -695,7 +647,8 @@ async fn main() {
         .route(
             "/:variant",
             get(
-                move |Path(variant): Path<Variant>, Query(query): Query<TablebaseQuery>| async move {
+                move |Path(variant): Path<TablebaseVariant>,
+                      Query(query): Query<TablebaseQuery>| async move {
                     tokio::task::spawn_blocking(move || try_probe(tbs, variant, query))
                         .await
                         .expect("probe")
@@ -706,7 +659,8 @@ async fn main() {
         .route(
             "/:variant/mainline",
             get(
-                move |Path(variant): Path<Variant>, Query(query): Query<TablebaseQuery>| async move {
+                move |Path(variant): Path<TablebaseVariant>,
+                      Query(query): Query<TablebaseQuery>| async move {
                     tokio::task::spawn_blocking(move || try_mainline(tbs, variant, query))
                         .await
                         .expect("mainline")
