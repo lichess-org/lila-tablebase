@@ -95,9 +95,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.59.2"
+version = "0.60.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bd2a9a458e8f4304c52c43ebb0cfbd520289f8379a52e329a38afda99bf8eb8"
+checksum = "062dddbc1ba4aca46de6338e2bf87771414c335f7b2f2036e8f3e9befebf88e6"
 dependencies = [
  "bitflags",
  "cexpr",
@@ -323,9 +323,9 @@ dependencies = [
 
 [[package]]
 name = "gaviota-sys"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "410ad9848be348c7e511c0144c176412ea410ce260e7b72fde3a445a31d0d5f2"
+checksum = "dcc733602933caf7b2086da51625985d3c70ad4bbbbd40c0889919ea6520367e"
 dependencies = [
  "bindgen",
  "cc",
