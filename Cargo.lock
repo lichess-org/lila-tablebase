@@ -317,9 +317,9 @@ dependencies = [
 
 [[package]]
 name = "gaviota-sys"
-version = "0.1.19"
+version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcc733602933caf7b2086da51625985d3c70ad4bbbbd40c0889919ea6520367e"
+checksum = "7b6c6df77b6ea9d3726c1b68d1704578bac04588c7791d38c0e91408791859a9"
 dependencies = [
  "bindgen",
  "cc",
