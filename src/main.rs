@@ -17,7 +17,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use clap::{IntoApp as _, Parser};
+use clap::{builder::PathBufValueParser, ArgAction, Parser, CommandFactory as _};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr, FromInto};
@@ -562,20 +562,20 @@ fn try_mainline(
 #[derive(Parser, Debug)]
 struct Opt {
     /// Directory with tablebase files for standard chess.
-    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     standard: Vec<PathBuf>,
     /// Directory with tablebase files for atomic chess.
-    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     atomic: Vec<PathBuf>,
     /// Directory with tablebase files for antichess.
-    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     antichess: Vec<PathBuf>,
     /// Directory with Gaviota tablebase files.
-    #[clap(long, multiple_occurrences = true, parse(from_os_str))]
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     gaviota: Vec<PathBuf>,
 
     /// Listen on this socket address.
-    #[clap(long, default_value = "127.0.0.1:9000")]
+    #[arg(long, default_value = "127.0.0.1:9000")]
     bind: SocketAddr,
 }
 
