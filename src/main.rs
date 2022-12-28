@@ -53,11 +53,12 @@ impl From<TablebaseVariant> for Variant {
 }
 
 impl TablebaseVariant {
-    fn position(self, fen: Fen) -> Result<VariantPosition, PositionError<VariantPosition>> {
+    fn position(self, fen: Fen) -> Result<VariantPosition, Arc<PositionError<VariantPosition>>> {
         VariantPosition::from_setup(self.into(), fen.into_setup(), CastlingMode::Standard)
             .or_else(PositionError::ignore_invalid_castling_rights)
             .or_else(PositionError::ignore_invalid_ep_square)
             .or_else(PositionError::ignore_impossible_check)
+            .map_err(Arc::new)
     }
 }
 
@@ -484,7 +485,7 @@ impl Tablebases {
 #[derive(Debug, Clone)]
 enum TablebaseError {
     Fen(ParseFenError),
-    Position(PositionError<VariantPosition>),
+    Position(Arc<PositionError<VariantPosition>>),
     Syzygy(Arc<SyzygyError>),
 }
 
@@ -494,8 +495,8 @@ impl From<ParseFenError> for TablebaseError {
     }
 }
 
-impl From<PositionError<VariantPosition>> for TablebaseError {
-    fn from(v: PositionError<VariantPosition>) -> TablebaseError {
+impl From<Arc<PositionError<VariantPosition>>> for TablebaseError {
+    fn from(v: Arc<PositionError<VariantPosition>>) -> TablebaseError {
         TablebaseError::Position(v)
     }
 }
