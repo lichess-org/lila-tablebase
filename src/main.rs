@@ -7,18 +7,21 @@ use std::{
     ops::Neg,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
+    sync::Arc,
+    time::Duration,
 };
 
 use arrayvec::ArrayVec;
 use axum::{
-    extract::{Path, Query},
+    extract::{FromRef, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use clap::{builder::PathBufValueParser, ArgAction, Parser, CommandFactory as _};
+use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use log::{error, info, warn};
+use moka::future::Cache;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{
@@ -29,8 +32,9 @@ use shakmaty::{
     CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, Role,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
+use tokio::task;
 
-#[derive(Deserialize, Copy, Clone, Debug)]
+#[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
 enum TablebaseVariant {
     Standard,
@@ -57,7 +61,7 @@ impl TablebaseVariant {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 struct TablebaseResponse {
     #[serde(flatten)]
     pos: PositionInfo,
@@ -66,7 +70,7 @@ struct TablebaseResponse {
 }
 
 #[serde_as]
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 struct MoveInfo {
     #[serde_as(as = "DisplayFromStr")]
     uci: Uci,
@@ -83,7 +87,7 @@ struct MoveInfo {
 }
 
 #[serde_as]
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 struct PositionInfo {
     checkmate: bool,
     stalemate: bool,
@@ -477,11 +481,11 @@ impl Tablebases {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TablebaseError {
     Fen(ParseFenError),
     Position(PositionError<VariantPosition>),
-    Syzygy(SyzygyError),
+    Syzygy(Arc<SyzygyError>),
 }
 
 impl From<ParseFenError> for TablebaseError {
@@ -498,7 +502,7 @@ impl From<PositionError<VariantPosition>> for TablebaseError {
 
 impl From<SyzygyError> for TablebaseError {
     fn from(v: SyzygyError) -> TablebaseError {
-        TablebaseError::Syzygy(v)
+        TablebaseError::Syzygy(Arc::new(v))
     }
 }
 
@@ -507,25 +511,26 @@ impl IntoResponse for TablebaseError {
         (match self {
             TablebaseError::Fen(err) => (StatusCode::BAD_REQUEST, err.to_string()),
             TablebaseError::Position(err) => (StatusCode::BAD_REQUEST, err.to_string()),
-            TablebaseError::Syzygy(err @ SyzygyError::Castling)
-            | TablebaseError::Syzygy(err @ SyzygyError::TooManyPieces) => {
-                (StatusCode::NOT_FOUND, err.to_string())
-            }
-            TablebaseError::Syzygy(err @ SyzygyError::MissingTable { .. }) => {
-                warn!("{}", err);
-                (StatusCode::NOT_FOUND, err.to_string())
-            }
-            TablebaseError::Syzygy(err @ SyzygyError::ProbeFailed { .. }) => {
-                error!("{}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-            }
+            TablebaseError::Syzygy(err) => match *err {
+                SyzygyError::Castling | SyzygyError::TooManyPieces => {
+                    (StatusCode::NOT_FOUND, err.to_string())
+                }
+                SyzygyError::MissingTable { .. } => {
+                    warn!("{err}");
+                    (StatusCode::NOT_FOUND, err.to_string())
+                }
+                SyzygyError::ProbeFailed { .. } => {
+                    error!("{err}");
+                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                }
+            },
         })
         .into_response()
     }
 }
 
 #[serde_as]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 struct TablebaseQuery {
     #[serde_as(as = "DisplayFromStr")]
     fen: Fen,
@@ -574,9 +579,33 @@ struct Opt {
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     gaviota: Vec<PathBuf>,
 
+    /// Maximum number of cached responses.
+    #[arg(long, default_value = "20000")]
+    cache: u64,
+
     /// Listen on this socket address.
     #[arg(long, default_value = "127.0.0.1:9000")]
     bind: SocketAddr,
+}
+
+type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
+
+#[derive(Clone)]
+struct AppState {
+    tbs: &'static Tablebases,
+    cache: TablebaseCache,
+}
+
+impl FromRef<AppState> for &'static Tablebases {
+    fn from_ref(state: &AppState) -> &'static Tablebases {
+        state.tbs
+    }
+}
+
+impl FromRef<AppState> for TablebaseCache {
+    fn from_ref(state: &AppState) -> TablebaseCache {
+        state.cache.clone()
+    }
 }
 
 #[tokio::main]
@@ -594,33 +623,6 @@ async fn main() {
         println!();
         return;
     }
-
-    // Initialize Syzygy tablebases.
-    let tbs: &'static Tablebases = {
-        let mut standard = SyzygyTablebase::<Chess>::new();
-        let mut atomic = SyzygyTablebase::<Atomic>::new();
-        let mut antichess = SyzygyTablebase::<Antichess>::new();
-
-        for path in opt.standard {
-            standard
-                .add_directory(path)
-                .expect("open standard directory");
-        }
-        for path in opt.atomic {
-            atomic.add_directory(path).expect("open atomic directory");
-        }
-        for path in opt.antichess {
-            antichess
-                .add_directory(path)
-                .expect("open antichess directory");
-        }
-
-        Box::leak(Box::new(Tablebases {
-            standard,
-            atomic,
-            antichess,
-        }))
-    };
 
     // Initialize Gaviota tablebase.
     if !opt.gaviota.is_empty() {
@@ -643,34 +645,76 @@ async fn main() {
         }
     }
 
+    // Initialize Syzygy tablebases.
+    let state = AppState {
+        tbs: {
+            let mut standard = SyzygyTablebase::<Chess>::new();
+            let mut atomic = SyzygyTablebase::<Atomic>::new();
+            let mut antichess = SyzygyTablebase::<Antichess>::new();
+
+            for path in opt.standard {
+                standard
+                    .add_directory(path)
+                    .expect("open standard directory");
+            }
+            for path in opt.atomic {
+                atomic.add_directory(path).expect("open atomic directory");
+            }
+            for path in opt.antichess {
+                antichess
+                    .add_directory(path)
+                    .expect("open antichess directory");
+            }
+
+            Box::leak(Box::new(Tablebases {
+                standard,
+                atomic,
+                antichess,
+            }))
+        },
+        cache: Cache::builder()
+            .max_capacity(opt.cache)
+            .time_to_idle(Duration::from_secs(60 * 10))
+            .build(),
+    };
+
     let app = Router::new()
-        .route(
-            "/:variant",
-            get(
-                move |Path(variant): Path<TablebaseVariant>,
-                      Query(query): Query<TablebaseQuery>| async move {
-                    tokio::task::spawn_blocking(move || try_probe(tbs, variant, query))
-                        .await
-                        .expect("probe")
-                        .map(Json)
-                },
-            ),
-        )
-        .route(
-            "/:variant/mainline",
-            get(
-                move |Path(variant): Path<TablebaseVariant>,
-                      Query(query): Query<TablebaseQuery>| async move {
-                    tokio::task::spawn_blocking(move || try_mainline(tbs, variant, query))
-                        .await
-                        .expect("mainline")
-                        .map(Json)
-                },
-            ),
-        );
+        .route("/:variant", get(handle_probe))
+        .route("/:variant/mainline", get(handle_mainline))
+        .with_state(state);
 
     axum::Server::bind(&opt.bind)
         .serve(app.into_make_service())
         .await
         .expect("bind");
+}
+
+async fn handle_probe(
+    State(tbs): State<&'static Tablebases>,
+    State(cache): State<TablebaseCache>,
+    Path(variant): Path<TablebaseVariant>,
+    Query(query): Query<TablebaseQuery>,
+) -> Result<Json<TablebaseResponse>, TablebaseError> {
+    match cache
+        .try_get_with((variant, query.clone()), async move {
+            task::spawn_blocking(move || try_probe(tbs, variant, query))
+                .await
+                .expect("blocking probe")
+        })
+        .await
+    {
+        Ok(res) => Ok(Json(res)),
+        Err(err) => Err((*err).clone()),
+    }
+}
+
+async fn handle_mainline(
+    State(tbs): State<&'static Tablebases>,
+    Path(variant): Path<TablebaseVariant>,
+    Query(query): Query<TablebaseQuery>,
+) -> Result<Json<MainlineResponse>, TablebaseError> {
+    task::spawn_blocking(move || try_mainline(tbs, variant, query))
+        .await
+        .expect("blocking mainline")
+        .map(Json)
 }
