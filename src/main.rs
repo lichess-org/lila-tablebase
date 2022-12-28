@@ -679,6 +679,7 @@ async fn main() {
     };
 
     let app = Router::new()
+        .route("/monitor", get(handle_monitor))
         .route("/:variant", get(handle_probe))
         .route("/:variant/mainline", get(handle_mainline))
         .with_state(state);
@@ -687,6 +688,11 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .expect("bind");
+}
+
+async fn handle_monitor(State(cache): State<TablebaseCache>) -> String {
+    let cache = cache.entry_count();
+    format!("tablebase cache={cache}u")
 }
 
 async fn handle_probe(
