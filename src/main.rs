@@ -675,7 +675,7 @@ async fn main() {
         },
         cache: Cache::builder()
             .max_capacity(opt.cache)
-            .time_to_idle(Duration::from_secs(60 * 2))
+            .time_to_idle(Duration::from_secs(60 * 5))
             .build(),
     };
 
