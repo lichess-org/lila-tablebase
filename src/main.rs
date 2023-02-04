@@ -7,13 +7,16 @@ use std::{
     ops::Neg,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
 use arrayvec::ArrayVec;
 use axum::{
-    extract::{FromRef, Path, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
@@ -32,7 +35,7 @@ use shakmaty::{
     CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, Role,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
-use tokio::task;
+use tokio::{sync::Semaphore, task};
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -591,22 +594,11 @@ struct Opt {
 
 type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
 
-#[derive(Clone)]
 struct AppState {
-    tbs: &'static Tablebases,
+    tbs: Tablebases,
     cache: TablebaseCache,
-}
-
-impl FromRef<AppState> for &'static Tablebases {
-    fn from_ref(state: &AppState) -> &'static Tablebases {
-        state.tbs
-    }
-}
-
-impl FromRef<AppState> for TablebaseCache {
-    fn from_ref(state: &AppState) -> TablebaseCache {
-        state.cache.clone()
-    }
+    cache_miss: AtomicU64,
+    semaphore: Semaphore,
 }
 
 #[tokio::main]
@@ -647,7 +639,7 @@ async fn main() {
     }
 
     // Initialize Syzygy tablebases.
-    let state = AppState {
+    let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
             let mut standard = SyzygyTablebase::<Chess>::new();
             let mut atomic = SyzygyTablebase::<Atomic>::new();
@@ -667,17 +659,19 @@ async fn main() {
                     .expect("open antichess directory");
             }
 
-            Box::leak(Box::new(Tablebases {
+            Tablebases {
                 standard,
                 atomic,
                 antichess,
-            }))
+            }
         },
         cache: Cache::builder()
             .max_capacity(opt.cache)
             .time_to_idle(Duration::from_secs(60 * 5))
             .build(),
-    };
+        cache_miss: AtomicU64::new(0),
+        semaphore: Semaphore::new(8),
+    }));
 
     let app = Router::new()
         .route("/monitor", get(handle_monitor))
@@ -691,20 +685,23 @@ async fn main() {
         .expect("bind");
 }
 
-async fn handle_monitor(State(cache): State<TablebaseCache>) -> String {
-    let cache = cache.entry_count();
-    format!("tablebase cache={cache}u")
+async fn handle_monitor(State(app): State<&'static AppState>) -> String {
+    let cache = app.cache.entry_count();
+    let cache_miss = app.cache_miss.load(Ordering::Relaxed);
+    format!("tablebase cache={cache}u,cache_miss={cache_miss}u")
 }
 
 async fn handle_probe(
-    State(tbs): State<&'static Tablebases>,
-    State(cache): State<TablebaseCache>,
+    State(app): State<&'static AppState>,
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Json<TablebaseResponse>, TablebaseError> {
-    match cache
+    match app
+        .cache
         .try_get_with((variant, query.clone()), async move {
-            task::spawn_blocking(move || try_probe(tbs, variant, query))
+            app.cache_miss.fetch_add(1, Ordering::Relaxed);
+            let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
+            task::spawn_blocking(move || try_probe(&app.tbs, variant, query))
                 .await
                 .expect("blocking probe")
         })
@@ -716,11 +713,12 @@ async fn handle_probe(
 }
 
 async fn handle_mainline(
-    State(tbs): State<&'static Tablebases>,
+    State(app): State<&'static AppState>,
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Json<MainlineResponse>, TablebaseError> {
-    task::spawn_blocking(move || try_mainline(tbs, variant, query))
+    let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
+    task::spawn_blocking(move || try_mainline(&app.tbs, variant, query))
         .await
         .expect("blocking mainline")
         .map(Json)
