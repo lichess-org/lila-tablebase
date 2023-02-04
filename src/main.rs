@@ -670,7 +670,7 @@ async fn main() {
             .time_to_idle(Duration::from_secs(60 * 5))
             .build(),
         cache_miss: AtomicU64::new(0),
-        semaphore: Semaphore::new(8),
+        semaphore: Semaphore::new(16),
     }));
 
     let app = Router::new()
