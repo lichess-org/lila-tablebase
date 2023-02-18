@@ -601,10 +601,18 @@ struct AppState {
     semaphore: Semaphore,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     env_logger::init();
 
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(128)
+        .build()
+        .expect("tokio runtime")
+        .block_on(serve());
+}
+
+async fn serve() {
     // Parse arguments.
     let opt = Opt::parse();
     if opt.standard.is_empty()
@@ -670,7 +678,7 @@ async fn main() {
             .time_to_idle(Duration::from_secs(60 * 5))
             .build(),
         cache_miss: AtomicU64::new(0),
-        semaphore: Semaphore::new(64),
+        semaphore: Semaphore::new(128),
     }));
 
     let app = Router::new()
