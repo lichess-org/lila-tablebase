@@ -23,5 +23,5 @@ gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 log = "0.4"
 env_logger = "0.10"
-serde_with = "2"
+serde_with = "3"
 moka = { version = "0.10", features = ["future"] }
