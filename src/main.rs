@@ -449,7 +449,7 @@ impl Tablebases {
 
         Ok(TablebaseResponse {
             pos: pos_info,
-            category: move_info.first().map(|m| -m.category).unwrap_or(category),
+            category: category,
             moves: move_info,
         })
     }
