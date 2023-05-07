@@ -154,22 +154,15 @@ impl PositionInfo {
 }
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 enum Category {
-    #[serde(rename = "loss")]
     Loss,
-    #[serde(rename = "unknown")]
     Unknown,
-    #[serde(rename = "maybe-loss")]
     MaybeLoss,
-    #[serde(rename = "blessed-loss")]
     BlessedLoss,
-    #[serde(rename = "draw")]
     Draw,
-    #[serde(rename = "cursed-win")]
     CursedWin,
-    #[serde(rename = "maybe-win")]
     MaybeWin,
-    #[serde(rename = "win")]
     Win,
 }
 
