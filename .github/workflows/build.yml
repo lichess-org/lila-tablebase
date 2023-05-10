@@ -27,6 +27,7 @@ jobs:
         with:
           name: lila-tablebase
       - name: Configure SSH
+        run: |
           mkdir -p ~/.ssh/
           touch ~/.ssh/deploy.key
           chmod 600 ~/.ssh/deploy.key
