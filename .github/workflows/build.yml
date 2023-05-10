@@ -1,0 +1,19 @@
+name: Build
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v3
+        with:
+          name: lila-tablebase
+          path: target/x86_64-unknown-linux-musl/release/lila-tablebase
