@@ -40,7 +40,7 @@ jobs:
           Host deploy-host
             HostName $SSH_HOST
             User $SSH_USER
-            IdentityFile ~/.ssh/deploy-key
+            IdentityFile ~/.ssh/deploy.key
             StrictHostKeyChecking no
           END
         env:
