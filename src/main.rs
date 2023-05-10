@@ -1,16 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::{
-    cmp::Reverse,
+    cmp::{Ordering, Reverse},
     ffi::CString,
     net::SocketAddr,
     ops::Neg,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::{atomic, atomic::AtomicU64, Arc},
     time::Duration,
 };
 
@@ -153,7 +150,7 @@ impl PositionInfo {
     }
 }
 
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum Category {
     Loss,
@@ -164,6 +161,21 @@ enum Category {
     CursedWin,
     MaybeWin,
     Win,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct PessimisticUnknown(Category); // loss < unknown < maybe-loss < ...
+
+impl Ord for PessimisticUnknown {
+    fn cmp(&self, other: &PessimisticUnknown) -> Ordering {
+        (self.0 as u32).cmp(&(other.0 as u32))
+    }
+}
+
+impl PartialOrd for PessimisticUnknown {
+    fn partial_cmp(&self, other: &PessimisticUnknown) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Neg for Category {
@@ -368,7 +380,7 @@ impl Tablebases {
 
         move_info.sort_by_key(|m: &MoveInfo| {
             (
-                m.category,
+                PessimisticUnknown(m.category),
                 (
                     Reverse(m.pos.checkmate),
                     Reverse(m.pos.variant_loss),
@@ -688,7 +700,7 @@ async fn serve() {
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
     let cache = app.cache.entry_count();
-    let cache_miss = app.cache_miss.load(Ordering::Relaxed);
+    let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
     format!("tablebase cache={cache}u,cache_miss={cache_miss}u")
 }
 
@@ -700,7 +712,7 @@ async fn handle_probe(
     match app
         .cache
         .try_get_with((variant, query.clone()), async move {
-            app.cache_miss.fetch_add(1, Ordering::Relaxed);
+            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
             let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
             task::spawn_blocking(move || try_probe(&app.tbs, variant, query))
                 .await
