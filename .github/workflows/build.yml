@@ -42,6 +42,6 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets:SSH_USER }}
+          SSH_USER: ${{ secrets.SSH_USER }}
       - name: Deploy via SSH
         run: cat lila-tablebase | ssh deploy "mv /usr/local/bin/lila-tablebase /usr/local/bin/lila-tablebase.bak && cat - > /usr/local/bin/lila-tablebase && systemctl restart lila-tablebase"
