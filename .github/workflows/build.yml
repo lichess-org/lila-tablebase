@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: terra
-      url: https://tablebase.lichess.ovh
+      url: https://tablebase.lichess.ovh/monitor
     concurrency: terra
     needs: build
     if: github.ref == 'refs/heads/master'
