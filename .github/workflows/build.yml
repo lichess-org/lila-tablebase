@@ -23,7 +23,9 @@ jobs:
     environment:
       name: terra
       url: https://tablebase.lichess.ovh/monitor
-    concurrency: terra
+    concurrency:
+      group: terra
+      cancel-in-progress: true
     needs: build
     if: github.ref == 'refs/heads/master'
     steps:
@@ -49,3 +51,4 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
       - name: Deploy via SSH
         run: cat lila-tablebase | ssh deploy-host "mv /usr/local/bin/lila-tablebase /usr/local/bin/lila-tablebase.bak && cat - > /usr/local/bin/lila-tablebase && chmod +x /usr/local/bin/lila-tablebase && systemctl restart lila-tablebase"
+        if: always()
