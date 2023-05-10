@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: terra
-      url: https://tabeblebase.lichess.ovh
+      url: https://tablebase.lichess.ovh
     concurrency: terra
     needs: build
     if: github.ref == 'refs/heads/master'
@@ -48,4 +48,4 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
       - name: Deploy via SSH
-        run: cat lila-tablebase | ssh deploy-host "mv /usr/local/bin/lila-tablebase /usr/local/bin/lila-tablebase.bak && cat - > /usr/local/bin/lila-tablebase && systemctl restart lila-tablebase"
+        run: cat lila-tablebase | ssh deploy-host "mv /usr/local/bin/lila-tablebase /usr/local/bin/lila-tablebase.bak && cat - > /usr/local/bin/lila-tablebase && chmod +x /usr/local/bin/lila-tablebase && systemctl restart lila-tablebase"
