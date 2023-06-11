@@ -17,8 +17,8 @@ axum = "0.6"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
-shakmaty = "0.25"
-shakmaty-syzygy = { version = "0.23", features = ["variant"] }
+shakmaty = "0.26"
+shakmaty-syzygy = { version = "0.24", features = ["variant"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 log = "0.4"
