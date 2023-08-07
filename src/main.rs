@@ -714,7 +714,7 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
         format!("tablebase cache={cache}u,cache_miss={cache_miss}u")
     } else {
         format!(
-            "event,program=lila-http commit={:?},text={:?}",
+            "event,program=lila-tablebase commit={:?},text={:?}",
             env!("VERGEN_GIT_SHA"),
             env!("VERGEN_GIT_COMMIT_MESSAGE")
         )
