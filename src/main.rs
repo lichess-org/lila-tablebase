@@ -7,7 +7,11 @@ use std::{
     ops::Neg,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
-    sync::{atomic, atomic::AtomicU64, Arc},
+    sync::{
+        atomic,
+        atomic::{AtomicBool, AtomicU64},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -604,6 +608,7 @@ struct AppState {
     cache: TablebaseCache,
     cache_miss: AtomicU64,
     semaphore: Semaphore,
+    deploy_event_sent: AtomicBool,
 }
 
 fn main() {
@@ -684,6 +689,7 @@ async fn serve() {
             .build(),
         cache_miss: AtomicU64::new(0),
         semaphore: Semaphore::new(128),
+        deploy_event_sent: AtomicBool::new(false),
     }));
 
     let app = Router::new()
@@ -699,9 +705,20 @@ async fn serve() {
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
-    let cache = app.cache.entry_count();
-    let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
-    format!("tablebase cache={cache}u,cache_miss={cache_miss}u")
+    if app
+        .deploy_event_sent
+        .fetch_or(true, atomic::Ordering::Relaxed)
+    {
+        let cache = app.cache.entry_count();
+        let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
+        format!("tablebase cache={cache}u,cache_miss={cache_miss}u")
+    } else {
+        format!(
+            "event,program=lila-http commit={:?},text={:?}",
+            env!("VERGEN_GIT_SHA"),
+            env!("VERGEN_GIT_COMMIT_MESSAGE")
+        )
+    }
 }
 
 async fn handle_probe(

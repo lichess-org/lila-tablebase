@@ -11,6 +11,7 @@ authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
 categories = ["games"]
 keywords = ["chess", "syzygy", "tablebase"]
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 axum = "0.6"
@@ -25,3 +26,6 @@ log = "0.4"
 env_logger = "0.10"
 serde_with = "3"
 moka = { version = "0.11", features = ["future"] }
+
+[build-dependencies]
+vergen = { version = "8.2.4", features = ["git", "gitcl"] }
