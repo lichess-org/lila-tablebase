@@ -24,6 +24,8 @@ use axum::{
     Json, Router,
 };
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
+use hyperlocal::SocketIncoming;
+use listenfd::ListenFd;
 use log::{error, info, warn};
 use moka::future::Cache;
 use serde::{Deserialize, Serialize};
@@ -36,7 +38,7 @@ use shakmaty::{
     CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, Role,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
-use tokio::{sync::Semaphore, task};
+use tokio::{net::UnixListener, sync::Semaphore, task};
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -698,10 +700,22 @@ async fn serve() {
         .route("/:variant/mainline", get(handle_mainline))
         .with_state(state);
 
-    axum::Server::bind(&opt.bind)
-        .serve(app.into_make_service())
-        .await
-        .expect("bind");
+    if let Some(listener) = ListenFd::from_env().take_unix_listener(0).unwrap() {
+        listener
+            .set_nonblocking(true)
+            .expect("configure non-blocking listener");
+
+        let listener = UnixListener::from_std(listener).expect("from std");
+        axum::Server::builder(SocketIncoming::from_listener(listener))
+            .serve(app.into_make_service())
+            .await
+            .expect("serve");
+    } else {
+        axum::Server::bind(&opt.bind)
+            .serve(app.into_make_service())
+            .await
+            .expect("serve");
+    }
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
