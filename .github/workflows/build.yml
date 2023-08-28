@@ -27,7 +27,7 @@ jobs:
       group: terra
       cancel-in-progress: true
     needs: build
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/download-artifact@v3
         with:
