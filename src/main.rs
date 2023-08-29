@@ -333,17 +333,15 @@ impl Tablebases {
             _ => (false, false),
         };
 
-        fn user_error_as_none<T>(res: Result<T, SyzygyError>) -> Result<Option<T>, SyzygyError> {
-            match res {
-                Err(SyzygyError::Castling)
-                | Err(SyzygyError::TooManyPieces)
-                | Err(SyzygyError::MissingTable { .. }) => Ok(None), // user error
-                Err(err) => Err(err), // server error
-                Ok(res) => Ok(Some(res)),
-            }
-        }
-
-        let dtz = user_error_as_none(self.probe_dtz(pos))?;
+        let dtz = match self.probe_dtz(pos) {
+            Err(
+                SyzygyError::Castling
+                | SyzygyError::TooManyPieces
+                | SyzygyError::MissingTable { .. },
+            ) => None, // user error
+            Err(err) => return Err(err), // server error
+            Ok(res) => Some(res),
+        };
 
         Ok(PositionInfo {
             checkmate: pos.is_checkmate(),
