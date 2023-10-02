@@ -7,6 +7,7 @@ use std::{
     ops::Neg,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
+    ptr,
     sync::{
         atomic,
         atomic::{AtomicBool, AtomicU64},
@@ -225,9 +226,8 @@ struct MainlineStep {
 }
 
 unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
-    let pos = match *pos {
-        VariantPosition::Chess(ref pos) => pos,
-        _ => return None,
+    let VariantPosition::Chess(ref pos) = pos else {
+        return None;
     };
 
     if pos.board().occupied().count() > 5 || pos.castles().any() {
@@ -272,8 +272,8 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
             bs.as_ptr(),
             wp.as_ptr(),
             bp.as_ptr(),
-            &mut info as *mut c_uint,
-            &mut plies as *mut c_uint,
+            ptr::addr_of_mut!(info),
+            ptr::addr_of_mut!(plies),
         )
     };
 
@@ -457,7 +457,7 @@ impl Tablebases {
 
         Ok(TablebaseResponse {
             pos: pos_info,
-            category: move_info.first().map(|m| -m.category).unwrap_or(category),
+            category: move_info.first().map_or(category, |m| -m.category),
             moves: move_info,
         })
     }
@@ -700,8 +700,10 @@ async fn serve() {
     ListenFd::from_env()
         .take_tcp_listener(0)
         .expect("tcp listener")
-        .map(|listener| axum::Server::from_tcp(listener).expect("from tcp"))
-        .unwrap_or_else(|| axum::Server::bind(&opt.bind))
+        .map_or_else(
+            || axum::Server::bind(&opt.bind),
+            |listener| axum::Server::from_tcp(listener).expect("from tcp"),
+        )
         .serve(app.into_make_service())
         .await
         .expect("serve");
