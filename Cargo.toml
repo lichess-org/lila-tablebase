@@ -14,7 +14,7 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-axum = "0.6"
+axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }

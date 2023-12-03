@@ -38,7 +38,7 @@ use shakmaty::{
     CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, Role,
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
-use tokio::{sync::Semaphore, task};
+use tokio::{net::TcpListener, sync::Semaphore, task};
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -697,16 +697,17 @@ async fn serve() {
         .route("/:variant/mainline", get(handle_mainline))
         .with_state(state);
 
-    ListenFd::from_env()
+    let listener = match ListenFd::from_env()
         .take_tcp_listener(0)
         .expect("tcp listener")
-        .map_or_else(
-            || axum::Server::bind(&opt.bind),
-            |listener| axum::Server::from_tcp(listener).expect("from tcp"),
-        )
-        .serve(app.into_make_service())
-        .await
-        .expect("serve");
+    {
+        Some(std_listener) => {
+            std_listener.set_nonblocking(true).expect("set nonblocking");
+            TcpListener::from_std(std_listener).expect("listener")
+        }
+        None => TcpListener::bind(&opt.bind).await.expect("bind"),
+    };
+    axum::serve(listener, app).await.expect("serve");
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
