@@ -3,6 +3,13 @@ name: Build
 on:
   - push
   - pull_request
+  - workflow_dispatch:
+      inputs:
+        environment:
+          required: true
+          type: choice
+          options:
+            - terra
 
 jobs:
   build:
@@ -21,13 +28,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
-      name: terra
-      url: https://tablebase.lichess.ovh/standard?fen=QN4n1/6r1/3k4/8/b2K4/8/8/8_b_-_-_0_1
+      name: ${{ inputs.environment }}
     concurrency:
-      group: terra
-      cancel-in-progress: true
+      group: ${{ inputs.environment }}
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -51,4 +56,3 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
       - name: Deploy via SSH
         run: cat lila-tablebase | ssh deploy-host "mv /usr/local/bin/lila-tablebase /usr/local/bin/lila-tablebase.bak && cat - > /usr/local/bin/lila-tablebase && chmod +x /usr/local/bin/lila-tablebase && systemctl restart lila-tablebase"
-        if: always()
