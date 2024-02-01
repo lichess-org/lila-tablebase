@@ -1709,11 +1709,12 @@ dependencies = [
 
 [[package]]
 name = "vergen"
-version = "8.2.6"
+version = "8.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1290fd64cc4e7d3c9b07d7f333ce0ce0007253e32870e632624835cc80b83939"
+checksum = "e27d6bdd219887a9eadd19e1c34f32e47fa332301184935c6d9bca26f3cca525"
 dependencies = [
  "anyhow",
+ "cfg-if",
  "rustversion",
  "time",
 ]
