@@ -289,10 +289,7 @@ unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
         }
         gaviota_sys::TB_return_values::tb_FORBID => None,
         _ => {
-            warn!(
-                "gaviota probe failed with result {} and info {}",
-                result, info
-            );
+            warn!("gaviota probe failed with result {result} and info {info}");
             None
         }
     }
@@ -663,17 +660,20 @@ async fn serve() {
             let mut antichess = SyzygyTablebase::<Antichess>::new();
 
             for path in opt.standard {
-                standard
-                    .add_directory(path)
+                let n = standard
+                    .add_directory(&path)
                     .expect("open standard directory");
+                info!("added {} standard tables from {}", n, path.display());
             }
             for path in opt.atomic {
-                atomic.add_directory(path).expect("open atomic directory");
+                let n = atomic.add_directory(&path).expect("open atomic directory");
+                info!("added {} atomic tables from {}", n, path.display());
             }
             for path in opt.antichess {
-                antichess
-                    .add_directory(path)
+                let n = antichess
+                    .add_directory(&path)
                     .expect("open antichess directory");
+                info!("added {} antichess tables from {}", n, path.display());
             }
 
             Tablebases {
