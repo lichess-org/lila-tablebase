@@ -18,12 +18,12 @@ axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
-shakmaty = "0.26"
-shakmaty-syzygy = { version = "0.24", features = ["variant"] }
+shakmaty = "0.27"
+shakmaty-syzygy = { version = "0.25", features = ["variant"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 log = "0.4"
-env_logger = "0.10"
+env_logger = "0.11"
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
 listenfd = "1"
