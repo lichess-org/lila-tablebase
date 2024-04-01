@@ -732,7 +732,7 @@ async fn handle_probe(
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Json<TablebaseResponse>, TablebaseError> {
-    match app
+    app
         .cache
         .try_get_with((variant, query.clone()), async move {
             app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
@@ -742,10 +742,8 @@ async fn handle_probe(
                 .expect("blocking probe")
         })
         .await
-    {
-        Ok(res) => Ok(Json(res)),
-        Err(err) => Err((*err).clone()),
-    }
+        .map(Json)
+        .map_err(Arc::unwrap_or_clone)
 }
 
 async fn handle_mainline(
