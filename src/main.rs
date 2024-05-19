@@ -742,7 +742,10 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
                             let event_group = event_group.replace(' ', "_");
                             metrics.extend([
                                 format!("{span_group}_{event_group}_count={}u", h.len()),
-                                format!("{span_group}_{event_group}_mean={}", h.mean()),
+                                format!(
+                                    "{span_group}_{event_group}_p50={}u",
+                                    h.value_at_quantile(0.50)
+                                ),
                                 format!(
                                     "{span_group}_{event_group}_p90={}u",
                                     h.value_at_quantile(0.90)
