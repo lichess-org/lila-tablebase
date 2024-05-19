@@ -611,7 +611,7 @@ struct AppState {
 
 fn main() {
     let subscriber = tracing_timing::Builder::default()
-        .build(|| tracing_timing::Histogram::new(2).expect("histogram"));
+        .build(|| tracing_timing::Histogram::new(3).expect("histogram"));
     let dispatcher = tracing::Dispatch::new(subscriber);
     tracing::dispatcher::set_global_default(dispatcher).expect("set tracing default dispatcher");
     tokio::runtime::Builder::new_multi_thread()
@@ -734,22 +734,31 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
             subscriber.with_histograms(|hs| {
                 for (span_group, hs) in hs {
                     let span_group = span_group.replace(' ', "_");
-                    for (event_group, h) in hs {
-                        let event_group = event_group.replace(' ', "_");
-                        metrics.extend([
-                            format!("{span_group}_{event_group}_count={}u", h.len()),
-                            format!("{span_group}_{event_group}_mean={}u", h.mean()),
-                            format!(
-                                "{span_group}_{event_group}_p90={}u",
-                                h.value_at_percentile(0.90)
-                            ),
-                            format!(
-                                "{span_group}_{event_group}_p99={}u",
-                                h.value_at_percentile(0.99)
-                            ),
-                            format!("{span_group}_{event_group}_max={}u", h.max()),
-                        ]);
-                        h.reset();
+                    if span_group == "dtz_table"
+                        || span_group == "wdl_table"
+                        || span_group == "request"
+                    {
+                        for (event_group, h) in hs {
+                            let event_group = event_group.replace(' ', "_");
+                            metrics.extend([
+                                format!("{span_group}_{event_group}_count={}u", h.len()),
+                                format!("{span_group}_{event_group}_mean={}", h.mean()),
+                                format!(
+                                    "{span_group}_{event_group}_p90={}u",
+                                    h.value_at_quantile(0.90)
+                                ),
+                                format!(
+                                    "{span_group}_{event_group}_p99={}u",
+                                    h.value_at_quantile(0.99)
+                                ),
+                                format!(
+                                    "{span_group}_{event_group}_p999={}u",
+                                    h.value_at_quantile(0.999)
+                                ),
+                                format!("{span_group}_{event_group}_max={}u", h.max()),
+                            ]);
+                            h.reset();
+                        }
                     }
                 }
             });
