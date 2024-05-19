@@ -19,14 +19,16 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 shakmaty = "0.27"
-shakmaty-syzygy = { version = "0.25", features = ["variant"] }
+shakmaty-syzygy = { version = "0.25", features = ["variant"], git = "https://github.com/niklasf/shakmaty-syzygy" }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
-log = "0.4"
-env_logger = "0.11"
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
 listenfd = "1"
+tower-http = { version = "0.5", features = ["trace"] }
+tracing-subscriber = "0.3"
+tracing = "0.1"
+tracing-timing = "0.6"
 
 [build-dependencies]
 vergen = { version = "8.2.4", features = ["git", "gitcl"] }

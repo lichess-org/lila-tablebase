@@ -26,7 +26,6 @@ use axum::{
 };
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
-use log::{error, info, warn};
 use moka::future::Cache;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr, FromInto};
@@ -39,6 +38,9 @@ use shakmaty::{
 };
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
 use tokio::{net::TcpListener, sync::Semaphore, task};
+use tower_http::trace::TraceLayer;
+use tracing::{error, info, warn};
+use tracing_timing::TimingSubscriber;
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -608,8 +610,10 @@ struct AppState {
 }
 
 fn main() {
-    env_logger::init();
-
+    let subscriber = tracing_timing::Builder::default()
+        .build(|| tracing_timing::Histogram::new(2).expect("histogram"));
+    let dispatcher = tracing::Dispatch::new(subscriber);
+    tracing::dispatcher::set_global_default(dispatcher).expect("set tracing default dispatcher");
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .max_blocking_threads(128)
@@ -695,7 +699,8 @@ async fn serve() {
         .route("/monitor", get(handle_monitor))
         .route("/:variant", get(handle_probe))
         .route("/:variant/mainline", get(handle_mainline))
-        .with_state(state);
+        .with_state(state)
+        .layer(TraceLayer::new_for_http());
 
     let listener = match ListenFd::from_env()
         .take_tcp_listener(0)
@@ -717,7 +722,41 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
     {
         let cache = app.cache.entry_count();
         let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
-        format!("tablebase cache={cache}u,cache_miss={cache_miss}u")
+        let mut metrics = vec![
+            format!("cache={cache}u"),
+            format!("cache_miss={cache_miss}u"),
+        ];
+        tokio::task::block_in_place(|| {
+            tracing::dispatcher::get_default(|dispatcher: &tracing::Dispatch| {
+                dispatcher
+                    .downcast_ref::<TimingSubscriber>()
+                    .expect("timing subscriber")
+                    .with_histograms(|hs| {
+                        for (span_group, hs) in hs {
+                            let span_group = span_group.replace(' ', "_");
+                            for (event_group, h) in hs {
+                                let event_group = event_group.replace(' ', "_");
+                                h.refresh_timeout(Duration::from_secs(1));
+                                metrics.extend([
+                                    format!("{span_group}_{event_group}_count={}u", h.len()),
+                                    format!("{span_group}_{event_group}_mean={}u", h.mean()),
+                                    format!(
+                                        "{span_group}_{event_group}_p90={}u",
+                                        h.value_at_percentile(0.90)
+                                    ),
+                                    format!(
+                                        "{span_group}_{event_group}_p99={}u",
+                                        h.value_at_percentile(0.99)
+                                    ),
+                                    format!("{span_group}_{event_group}_max={}u", h.max()),
+                                ]);
+                                h.reset();
+                            }
+                        }
+                    });
+            });
+        });
+        format!("tablebase {}", metrics.join(","))
     } else {
         format!(
             "event,program=lila-tablebase commit={:?},text={:?}",
@@ -732,8 +771,7 @@ async fn handle_probe(
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Json<TablebaseResponse>, TablebaseError> {
-    app
-        .cache
+    app.cache
         .try_get_with((variant, query.clone()), async move {
             app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
             let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
