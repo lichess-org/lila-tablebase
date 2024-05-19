@@ -726,34 +726,32 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
             format!("cache={cache}u"),
             format!("cache_miss={cache_miss}u"),
         ];
-        tokio::task::block_in_place(|| {
-            tracing::dispatcher::get_default(|dispatcher: &tracing::Dispatch| {
-                dispatcher
-                    .downcast_ref::<TimingSubscriber>()
-                    .expect("timing subscriber")
-                    .with_histograms(|hs| {
-                        for (span_group, hs) in hs {
-                            let span_group = span_group.replace(' ', "_");
-                            for (event_group, h) in hs {
-                                let event_group = event_group.replace(' ', "_");
-                                h.refresh_timeout(Duration::from_secs(1));
-                                metrics.extend([
-                                    format!("{span_group}_{event_group}_count={}u", h.len()),
-                                    format!("{span_group}_{event_group}_mean={}u", h.mean()),
-                                    format!(
-                                        "{span_group}_{event_group}_p90={}u",
-                                        h.value_at_percentile(0.90)
-                                    ),
-                                    format!(
-                                        "{span_group}_{event_group}_p99={}u",
-                                        h.value_at_percentile(0.99)
-                                    ),
-                                    format!("{span_group}_{event_group}_max={}u", h.max()),
-                                ]);
-                                h.reset();
-                            }
-                        }
-                    });
+        tracing::dispatcher::get_default(|dispatcher: &tracing::Dispatch| {
+            let subscriber = dispatcher
+                .downcast_ref::<TimingSubscriber>()
+                .expect("timing subscriber");
+            subscriber.force_synchronize();
+            subscriber.with_histograms(|hs| {
+                for (span_group, hs) in hs {
+                    let span_group = span_group.replace(' ', "_");
+                    for (event_group, h) in hs {
+                        let event_group = event_group.replace(' ', "_");
+                        metrics.extend([
+                            format!("{span_group}_{event_group}_count={}u", h.len()),
+                            format!("{span_group}_{event_group}_mean={}u", h.mean()),
+                            format!(
+                                "{span_group}_{event_group}_p90={}u",
+                                h.value_at_percentile(0.90)
+                            ),
+                            format!(
+                                "{span_group}_{event_group}_p99={}u",
+                                h.value_at_percentile(0.99)
+                            ),
+                            format!("{span_group}_{event_group}_max={}u", h.max()),
+                        ]);
+                        h.reset();
+                    }
+                }
             });
         });
         format!("tablebase {}", metrics.join(","))
