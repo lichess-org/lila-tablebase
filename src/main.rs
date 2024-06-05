@@ -659,9 +659,9 @@ async fn serve() {
     // Initialize Syzygy tablebases.
     let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
-            let mut standard = unsafe { SyzygyTablebase::<Chess>::with_mmap_filesystem() };
-            let mut atomic = unsafe { SyzygyTablebase::<Atomic>::with_mmap_filesystem() };
-            let mut antichess = unsafe { SyzygyTablebase::<Antichess>::with_mmap_filesystem() };
+            let mut standard = SyzygyTablebase::<Chess>::new();
+            let mut atomic = SyzygyTablebase::<Atomic>::new();
+            let mut antichess = SyzygyTablebase::<Antichess>::new();
 
             for path in opt.standard {
                 let n = standard
