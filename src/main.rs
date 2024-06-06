@@ -2,10 +2,16 @@
 
 use std::{
     cmp::{Ordering, Reverse},
-    ffi::CString,
+    collections::HashMap,
+    ffi::{CString, OsString},
+    fs, io,
     net::SocketAddr,
     ops::Neg,
-    os::raw::{c_int, c_uchar, c_uint},
+    os::{
+        raw::{c_int, c_uchar, c_uint},
+        unix::{fs::FileExt as _, io::AsRawFd as _},
+    },
+    path,
     path::PathBuf,
     ptr,
     sync::{
@@ -36,7 +42,10 @@ use shakmaty::{
     variant::{Antichess, Atomic, Chess, Variant, VariantPosition},
     CastlingMode, EnPassantMode, Move, Outcome, Position, PositionError, Role,
 };
-use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase};
+use shakmaty_syzygy::{
+    filesystem::{Filesystem, RandomAccessFile, ReadHint},
+    AmbiguousWdl, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
+};
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
 use tracing::{error, info, warn};
@@ -575,6 +584,99 @@ fn try_mainline(
     Ok(tbs.mainline(variant.position(query.fen)?)?)
 }
 
+#[derive(Clone)]
+struct HotPrefixFilesystem {
+    prefix_candidates: HashMap<OsString, PathBuf>,
+}
+
+impl HotPrefixFilesystem {
+    fn new() -> HotPrefixFilesystem {
+        HotPrefixFilesystem {
+            prefix_candidates: HashMap::new(),
+        }
+    }
+
+    fn add_directory(&mut self, path: &path::Path) -> io::Result<usize> {
+        let mut n = 0;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.extension().map_or(false, |ext| ext == "prefix") {
+                continue;
+            }
+            if !entry.metadata()?.is_file() {
+                continue;
+            }
+            if let Some(name) = path.file_stem() {
+                self.prefix_candidates.insert(name.to_owned(), path);
+                n += 1;
+            }
+        }
+        Ok(n)
+    }
+}
+
+impl Filesystem for HotPrefixFilesystem {
+    fn regular_file_size(&self, path: &path::Path) -> io::Result<u64> {
+        let meta = path.metadata()?;
+        if !meta.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a regular file",
+            ));
+        }
+        Ok(meta.len())
+    }
+
+    fn read_dir(&self, path: &path::Path) -> io::Result<Vec<PathBuf>> {
+        fs::read_dir(path)?
+            .map(|maybe_entry| maybe_entry.map(|entry| entry.path().to_owned()))
+            .collect()
+    }
+
+    fn open(&self, path: &path::Path) -> io::Result<Box<dyn RandomAccessFile>> {
+        let file = fs::File::open(path)?;
+
+        unsafe {
+            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+        }
+
+        Ok(Box::new(
+            if let Some(prefix_file_path) = path
+                .file_name()
+                .and_then(|name| self.prefix_candidates.get(name))
+            {
+                HotPrefixRandomAccessFile {
+                    file,
+                    prefix_file: Some(fs::File::open(prefix_file_path)?),
+                    prefix_len: prefix_file_path.metadata()?.len(),
+                }
+            } else {
+                HotPrefixRandomAccessFile {
+                    file,
+                    prefix_file: None,
+                    prefix_len: 0,
+                }
+            },
+        ))
+    }
+}
+
+struct HotPrefixRandomAccessFile {
+    file: fs::File,
+    prefix_file: Option<fs::File>,
+    prefix_len: u64,
+}
+
+impl RandomAccessFile for HotPrefixRandomAccessFile {
+    fn read_at(&self, buf: &mut [u8], offset: u64, _hint: ReadHint) -> io::Result<usize> {
+        match self.prefix_file {
+            Some(ref prefix_file) if offset < self.prefix_len => prefix_file.read_at(buf, offset),
+            _ => self.file.read_at(buf, offset),
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 struct Opt {
     /// Directory with tablebase files for standard chess.
@@ -589,6 +691,16 @@ struct Opt {
     /// Directory with Gaviota tablebase files.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     gaviota: Vec<PathBuf>,
+
+    /// Directory with prefix files.
+    ///
+    /// For a table named KRvK.rtbw, a corresponding prefix file named
+    /// KRvK.rtbw.prefix will be used if present. It can contain any number of
+    /// bytes from the start of the original table file. Storing the prefix
+    /// file on a faster medium may speed up acccess to the sparse block index
+    /// and the block length table.
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
+    hot_prefix: Vec<PathBuf>,
 
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
@@ -656,12 +768,25 @@ async fn serve() {
         }
     }
 
+    // Prepare custom Syzygy filesystem implementation.
+    let mut filesystem = Box::new(HotPrefixFilesystem::new());
+    for path in opt.hot_prefix {
+        let n = filesystem
+            .add_directory(&path)
+            .expect("add hot prefix directory");
+        info!(
+            "added {} hot prefix candidate files from {}",
+            n,
+            path.display()
+        );
+    }
+
     // Initialize Syzygy tablebases.
     let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
-            let mut standard = SyzygyTablebase::<Chess>::new();
-            let mut atomic = SyzygyTablebase::<Atomic>::new();
-            let mut antichess = SyzygyTablebase::<Antichess>::new();
+            let mut standard = SyzygyTablebase::<Chess>::with_filesystem(filesystem.clone());
+            let mut atomic = SyzygyTablebase::<Atomic>::with_filesystem(filesystem.clone());
+            let mut antichess = SyzygyTablebase::<Antichess>::with_filesystem(filesystem);
 
             for path in opt.standard {
                 let n = standard
