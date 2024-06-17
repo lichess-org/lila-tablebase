@@ -621,7 +621,7 @@ impl Filesystem for HotPrefixFilesystem {
         let meta = path.metadata()?;
         if !meta.is_file() {
             return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+                io::ErrorKind::InvalidInput,
                 "not a regular file",
             ));
         }
