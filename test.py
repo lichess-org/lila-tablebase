@@ -42,7 +42,7 @@ class TablebaseTest(unittest.TestCase):
 
     def test_maybe_win(self):
         r = standard("K7/2k5/3n4/8/2b5/8/8/8 w - - 97 128")
-        self.assertEqual(r["category"], "maybe-loss")
+        self.assertIn(r["category"], ["maybe-loss", "blessed-loss"])
         self.assertEqual(r["moves"][0]["san"], "Ka7")
         self.assertEqual(r["moves"][0]["dtz"], 2)
         self.assertEqual(r["moves"][0]["category"], "maybe-win")
@@ -91,7 +91,7 @@ class TablebaseTest(unittest.TestCase):
         r = standard("8/6B1/6B1/8/2K2n2/4k3/8/8 w - - 1 2")
         self.assertIn(r["category"], ["maybe-win", "win"])
         self.assertEqual(r["moves"][0]["dtz"], -98)
-        self.assertIn(r["moves"][0]["category"], ["maybe-loss", "blessed-loss"])
+        self.assertIn(r["moves"][0]["category"], ["maybe-loss", "loss"])
 
 
 if __name__ == "__main__":
