@@ -5,9 +5,9 @@ mod filesystem;
 mod gaviota;
 mod request;
 mod response;
+mod tablebases;
 
 use std::{
-    cmp::Reverse,
     net::SocketAddr,
     path::PathBuf,
     sync::{
@@ -18,7 +18,6 @@ use std::{
     time::Duration,
 };
 
-use arrayvec::ArrayVec;
 use axum::{
     extract::{Path, Query, State},
     routing::get,
@@ -27,14 +26,6 @@ use axum::{
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
-use shakmaty::{
-    san::SanPlus,
-    variant::{Antichess, Atomic, Chess, VariantPosition},
-    Move, Outcome, Position,
-};
-use shakmaty_syzygy::{
-    filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
-};
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -44,234 +35,9 @@ use crate::{
     errors::TablebaseError,
     filesystem::HotPrefixFilesystem,
     request::{TablebaseQuery, TablebaseVariant},
-    response::{
-        Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
-        TablebaseResponse,
-    },
+    response::{MainlineResponse, TablebaseResponse},
+    tablebases::Tablebases,
 };
-
-#[derive(Debug)]
-struct Tablebases {
-    standard: SyzygyTablebase<Chess>,
-    atomic: SyzygyTablebase<Atomic>,
-    antichess: SyzygyTablebase<Antichess>,
-}
-
-impl Tablebases {
-    fn probe_dtz(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
-        match *pos {
-            VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos),
-            _ => unimplemented!("variant not supported"),
-        }
-    }
-
-    fn best_move(
-        &self,
-        pos: &VariantPosition,
-    ) -> Result<Option<(Move, MaybeRounded<Dtz>)>, SyzygyError> {
-        match *pos {
-            VariantPosition::Chess(ref pos) => self.standard.best_move(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos),
-            _ => unimplemented!("variant not supported"),
-        }
-    }
-
-    fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
-        let (variant_win, variant_loss) = match pos.variant_outcome() {
-            Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
-            _ => (false, false),
-        };
-
-        let dtz = match self.probe_dtz(pos) {
-            Err(
-                SyzygyError::Castling
-                | SyzygyError::TooManyPieces
-                | SyzygyError::MissingTable { .. },
-            ) => None, // user error
-            Err(err) => return Err(err), // server error
-            Ok(res) => Some(res),
-        };
-
-        Ok(PositionInfo {
-            checkmate: pos.is_checkmate(),
-            stalemate: pos.is_stalemate(),
-            variant_win,
-            variant_loss,
-            insufficient_material: pos.is_insufficient_material(),
-            maybe_rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
-            precise_dtz: dtz.and_then(MaybeRounded::precise),
-            dtz,
-            dtm: unsafe { gaviota::probe_dtm(pos) },
-            halfmoves: pos.halfmoves(),
-        })
-    }
-
-    fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
-        let halfmoves = pos.halfmoves();
-
-        let mut move_info = pos
-            .legal_moves()
-            .iter()
-            .map(|m| {
-                let mut after = pos.clone();
-                after.play_unchecked(m);
-
-                let after_info = self.position_info(&after)?;
-
-                Ok(MoveInfo {
-                    uci: m.to_uci(pos.castles().mode()),
-                    san: SanPlus::from_move(pos.clone(), m),
-                    capture: m.capture(),
-                    promotion: m.promotion(),
-                    zeroing: m.is_zeroing(),
-                    category: after_info.category(halfmoves),
-                    pos: after_info,
-                })
-            })
-            .collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
-
-        move_info.sort_by_key(|m: &MoveInfo| {
-            (
-                PessimisticUnknown(m.category),
-                (
-                    Reverse(m.pos.checkmate),
-                    Reverse(m.pos.variant_loss),
-                    m.pos.variant_win,
-                ),
-                (
-                    Reverse(m.pos.stalemate),
-                    Reverse(m.pos.insufficient_material),
-                ),
-                if m.pos
-                    .dtz
-                    .unwrap_or(MaybeRounded::Precise(Dtz(0)))
-                    .is_negative()
-                {
-                    Reverse(m.pos.dtm)
-                } else {
-                    Reverse(None)
-                },
-                if m.pos
-                    .dtz
-                    .unwrap_or(MaybeRounded::Precise(Dtz(0)))
-                    .is_positive()
-                {
-                    m.pos.dtm.map(Reverse)
-                } else {
-                    None
-                },
-                m.zeroing
-                    ^ !m.pos
-                        .dtz
-                        .unwrap_or(MaybeRounded::Precise(Dtz(0)))
-                        .is_positive(),
-                m.capture.is_some()
-                    ^ !m.pos
-                        .dtz
-                        .unwrap_or(MaybeRounded::Precise(Dtz(0)))
-                        .is_positive(),
-                m.pos.maybe_rounded_dtz.map(Reverse),
-                (Reverse(m.capture), Reverse(m.promotion)),
-            )
-        });
-
-        let pos_info = self.position_info(pos)?;
-        let category = pos_info.category(halfmoves.saturating_sub(1));
-
-        // Use category of previous position to infer maybe-win / maybe-loss,
-        // if possible.
-        for (prev, maybe, correct) in [
-            (Category::Win, Category::MaybeLoss, Category::Loss),
-            (
-                Category::CursedWin,
-                Category::MaybeLoss,
-                Category::BlessedLoss,
-            ),
-            (
-                Category::BlessedLoss,
-                Category::MaybeWin,
-                Category::CursedWin,
-            ),
-            (Category::Loss, Category::MaybeWin, Category::Win),
-        ] {
-            if category == prev {
-                for m in &mut move_info {
-                    if m.category != maybe {
-                        break;
-                    }
-                    m.category = correct;
-                }
-            }
-        }
-
-        Ok(TablebaseResponse {
-            pos: pos_info,
-            category: move_info.first().map_or(category, |m| -m.category),
-            moves: move_info,
-        })
-    }
-
-    fn mainline(&self, mut pos: VariantPosition) -> Result<MainlineResponse, SyzygyError> {
-        let dtz = self.probe_dtz(&pos)?;
-        let mut mainline = Vec::new();
-
-        if !dtz.is_zero() {
-            while pos.halfmoves() < 100 {
-                if let Some((m, dtz)) = self.best_move(&pos)? {
-                    mainline.push(MainlineStep {
-                        uci: m.to_uci(pos.castles().mode()),
-                        dtz: dtz.ignore_rounding(),
-                        precise_dtz: dtz.precise(),
-                        san: SanPlus::from_move_and_play_unchecked(&mut pos, &m),
-                    });
-                } else {
-                    break;
-                }
-            }
-        }
-
-        Ok(MainlineResponse {
-            dtz: dtz.ignore_rounding(),
-            precise_dtz: dtz.precise(),
-            mainline,
-            winner: pos
-                .outcome()
-                .and_then(|o| o.winner())
-                .map(|winner| winner.char()),
-        })
-    }
-}
-
-fn try_probe(
-    tbs: &Tablebases,
-    variant: TablebaseVariant,
-    query: TablebaseQuery,
-) -> Result<TablebaseResponse, TablebaseError> {
-    match variant {
-        TablebaseVariant::Standard => info!("standard: {}", &query.fen),
-        TablebaseVariant::Atomic => info!("atomic: {}", &query.fen),
-        TablebaseVariant::Antichess => info!("antichess: {}", &query.fen),
-    }
-
-    Ok(tbs.probe(&variant.position(query.fen)?)?)
-}
-
-fn try_mainline(
-    tbs: &Tablebases,
-    variant: TablebaseVariant,
-    query: TablebaseQuery,
-) -> Result<MainlineResponse, TablebaseError> {
-    match variant {
-        TablebaseVariant::Standard => info!("standard mainline: {}", &query.fen),
-        TablebaseVariant::Atomic => info!("atomic mainline: {}", &query.fen),
-        TablebaseVariant::Antichess => info!("antichess mainline: {}", &query.fen),
-    }
-
-    Ok(tbs.mainline(variant.position(query.fen)?)?)
-}
 
 #[derive(Parser, Debug)]
 struct Opt {
@@ -307,8 +73,6 @@ struct Opt {
     bind: SocketAddr,
 }
 
-type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
-
 struct AppState {
     tbs: Tablebases,
     cache: TablebaseCache,
@@ -317,111 +81,64 @@ struct AppState {
     deploy_event_sent: AtomicBool,
 }
 
-fn main() {
-    let subscriber = tracing_timing::Builder::default()
-        .build(|| tracing_timing::Histogram::new(3).expect("histogram"));
-    let dispatcher = tracing::Dispatch::new(subscriber);
-    tracing::dispatcher::set_global_default(dispatcher).expect("set tracing default dispatcher");
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .max_blocking_threads(128)
-        .build()
-        .expect("tokio runtime")
-        .block_on(serve());
+type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
+
+fn try_probe(
+    tbs: &Tablebases,
+    variant: TablebaseVariant,
+    query: TablebaseQuery,
+) -> Result<TablebaseResponse, TablebaseError> {
+    match variant {
+        TablebaseVariant::Standard => info!("standard: {}", &query.fen),
+        TablebaseVariant::Atomic => info!("atomic: {}", &query.fen),
+        TablebaseVariant::Antichess => info!("antichess: {}", &query.fen),
+    }
+
+    Ok(tbs.probe(&variant.position(query.fen)?)?)
 }
 
-async fn serve() {
-    // Parse arguments.
-    let opt = Opt::parse();
-    if opt.standard.is_empty()
-        && opt.atomic.is_empty()
-        && opt.antichess.is_empty()
-        && opt.gaviota.is_empty()
-    {
-        Opt::command().print_help().expect("usage");
-        println!();
-        return;
+async fn handle_probe(
+    State(app): State<&'static AppState>,
+    Path(variant): Path<TablebaseVariant>,
+    Query(query): Query<TablebaseQuery>,
+) -> Result<Json<TablebaseResponse>, TablebaseError> {
+    app.cache
+        .try_get_with((variant, query.clone()), async move {
+            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
+            let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
+            task::spawn_blocking(move || try_probe(&app.tbs, variant, query))
+                .await
+                .expect("blocking probe")
+        })
+        .await
+        .map(Json)
+        .map_err(Arc::unwrap_or_clone)
+}
+
+fn try_mainline(
+    tbs: &Tablebases,
+    variant: TablebaseVariant,
+    query: TablebaseQuery,
+) -> Result<MainlineResponse, TablebaseError> {
+    match variant {
+        TablebaseVariant::Standard => info!("standard mainline: {}", &query.fen),
+        TablebaseVariant::Atomic => info!("atomic mainline: {}", &query.fen),
+        TablebaseVariant::Antichess => info!("antichess mainline: {}", &query.fen),
     }
 
-    // Initialize Gaviota tablebase.
-    if !opt.gaviota.is_empty() {
-        unsafe {
-            gaviota::init(&opt.gaviota);
-        }
-    }
+    Ok(tbs.mainline(variant.position(query.fen)?)?)
+}
 
-    // Prepare custom Syzygy filesystem implementation.
-    let mut filesystem = HotPrefixFilesystem::new();
-    for path in opt.hot_prefix {
-        let n = filesystem
-            .add_directory(&path)
-            .expect("add hot prefix directory");
-        info!(
-            "added {} hot prefix candidate files from {}",
-            n,
-            path.display()
-        );
-    }
-
-    let filesystem: Arc<dyn Filesystem> = Arc::new(filesystem);
-
-    // Initialize Syzygy tablebases.
-    let state: &'static AppState = Box::leak(Box::new(AppState {
-        tbs: {
-            let mut standard = SyzygyTablebase::<Chess>::with_filesystem(Arc::clone(&filesystem));
-            let mut atomic = SyzygyTablebase::<Atomic>::with_filesystem(Arc::clone(&filesystem));
-            let mut antichess = SyzygyTablebase::<Antichess>::with_filesystem(filesystem);
-
-            for path in opt.standard {
-                let n = standard
-                    .add_directory(&path)
-                    .expect("open standard directory");
-                info!("added {} standard tables from {}", n, path.display());
-            }
-            for path in opt.atomic {
-                let n = atomic.add_directory(&path).expect("open atomic directory");
-                info!("added {} atomic tables from {}", n, path.display());
-            }
-            for path in opt.antichess {
-                let n = antichess
-                    .add_directory(&path)
-                    .expect("open antichess directory");
-                info!("added {} antichess tables from {}", n, path.display());
-            }
-
-            Tablebases {
-                standard,
-                atomic,
-                antichess,
-            }
-        },
-        cache: Cache::builder()
-            .max_capacity(opt.cache)
-            .time_to_idle(Duration::from_secs(60 * 5))
-            .build(),
-        cache_miss: AtomicU64::new(0),
-        semaphore: Semaphore::new(128),
-        deploy_event_sent: AtomicBool::new(false),
-    }));
-
-    let app = Router::new()
-        .route("/monitor", get(handle_monitor))
-        .route("/:variant", get(handle_probe))
-        .route("/:variant/mainline", get(handle_mainline))
-        .with_state(state)
-        .layer(TraceLayer::new_for_http());
-
-    let listener = match ListenFd::from_env()
-        .take_tcp_listener(0)
-        .expect("tcp listener")
-    {
-        Some(std_listener) => {
-            std_listener.set_nonblocking(true).expect("set nonblocking");
-            TcpListener::from_std(std_listener).expect("listener")
-        }
-        None => TcpListener::bind(&opt.bind).await.expect("bind"),
-    };
-    axum::serve(listener, app).await.expect("serve");
+async fn handle_mainline(
+    State(app): State<&'static AppState>,
+    Path(variant): Path<TablebaseVariant>,
+    Query(query): Query<TablebaseQuery>,
+) -> Result<Json<MainlineResponse>, TablebaseError> {
+    let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
+    task::spawn_blocking(move || try_mainline(&app.tbs, variant, query))
+        .await
+        .expect("blocking mainline")
+        .map(Json)
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
@@ -485,32 +202,106 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
     }
 }
 
-async fn handle_probe(
-    State(app): State<&'static AppState>,
-    Path(variant): Path<TablebaseVariant>,
-    Query(query): Query<TablebaseQuery>,
-) -> Result<Json<TablebaseResponse>, TablebaseError> {
-    app.cache
-        .try_get_with((variant, query.clone()), async move {
-            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
-            let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
-            task::spawn_blocking(move || try_probe(&app.tbs, variant, query))
-                .await
-                .expect("blocking probe")
-        })
-        .await
-        .map(Json)
-        .map_err(Arc::unwrap_or_clone)
+async fn serve() {
+    // Parse arguments.
+    let opt = Opt::parse();
+    if opt.standard.is_empty()
+        && opt.atomic.is_empty()
+        && opt.antichess.is_empty()
+        && opt.gaviota.is_empty()
+    {
+        Opt::command().print_help().expect("usage");
+        println!();
+        return;
+    }
+
+    // Initialize Gaviota tablebase.
+    if !opt.gaviota.is_empty() {
+        unsafe {
+            gaviota::init(&opt.gaviota);
+        }
+    }
+
+    // Prepare custom Syzygy filesystem implementation.
+    let mut filesystem = HotPrefixFilesystem::new();
+    for path in opt.hot_prefix {
+        let n = filesystem
+            .add_directory(&path)
+            .expect("add hot prefix directory");
+        info!(
+            "added {} hot prefix candidate files from {}",
+            n,
+            path.display()
+        );
+    }
+
+    // Initialize Syzygy tablebases.
+    let state: &'static AppState = Box::leak(Box::new(AppState {
+        tbs: {
+            let mut tbs = Tablebases::with_filesystem(Arc::new(filesystem));
+            for path in opt.standard {
+                let n = tbs
+                    .standard
+                    .add_directory(&path)
+                    .expect("open standard directory");
+                info!("added {} standard tables from {}", n, path.display());
+            }
+            for path in opt.atomic {
+                let n = tbs
+                    .atomic
+                    .add_directory(&path)
+                    .expect("open atomic directory");
+                info!("added {} atomic tables from {}", n, path.display());
+            }
+            for path in opt.antichess {
+                let n = tbs
+                    .antichess
+                    .add_directory(&path)
+                    .expect("open antichess directory");
+                info!("added {} antichess tables from {}", n, path.display());
+            }
+            tbs
+        },
+        cache: Cache::builder()
+            .max_capacity(opt.cache)
+            .time_to_idle(Duration::from_secs(60 * 5))
+            .build(),
+        cache_miss: AtomicU64::new(0),
+        semaphore: Semaphore::new(128),
+        deploy_event_sent: AtomicBool::new(false),
+    }));
+
+    let app = Router::new()
+        .route("/monitor", get(handle_monitor))
+        .route("/:variant", get(handle_probe))
+        .route("/:variant/mainline", get(handle_mainline))
+        .with_state(state)
+        .layer(TraceLayer::new_for_http());
+
+    let listener = match ListenFd::from_env()
+        .take_tcp_listener(0)
+        .expect("tcp listener")
+    {
+        Some(std_listener) => {
+            std_listener.set_nonblocking(true).expect("set nonblocking");
+            TcpListener::from_std(std_listener).expect("listener")
+        }
+        None => TcpListener::bind(&opt.bind).await.expect("bind"),
+    };
+
+    axum::serve(listener, app).await.expect("serve");
 }
 
-async fn handle_mainline(
-    State(app): State<&'static AppState>,
-    Path(variant): Path<TablebaseVariant>,
-    Query(query): Query<TablebaseQuery>,
-) -> Result<Json<MainlineResponse>, TablebaseError> {
-    let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
-    task::spawn_blocking(move || try_mainline(&app.tbs, variant, query))
-        .await
-        .expect("blocking mainline")
-        .map(Json)
+fn main() {
+    let subscriber = tracing_timing::Builder::default()
+        .build(|| tracing_timing::Histogram::new(3).expect("histogram"));
+    let dispatcher = tracing::Dispatch::new(subscriber);
+    tracing::dispatcher::set_global_default(dispatcher).expect("set tracing default dispatcher");
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(128)
+        .build()
+        .expect("tokio runtime")
+        .block_on(serve());
 }
