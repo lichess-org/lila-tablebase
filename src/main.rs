@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod errors;
 mod filesystem;
 mod gaviota;
 
@@ -19,8 +20,6 @@ use std::{
 use arrayvec::ArrayVec;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
@@ -30,7 +29,7 @@ use moka::future::Cache;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{
-    fen::{Fen, ParseFenError},
+    fen::Fen,
     san::SanPlus,
     uci::Uci,
     variant::{Antichess, Atomic, Chess, Variant, VariantPosition},
@@ -42,10 +41,10 @@ use shakmaty_syzygy::{
 };
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
-use tracing::{error, info, warn};
+use tracing::info;
 use tracing_timing::TimingSubscriber;
 
-use crate::filesystem::HotPrefixFilesystem;
+use crate::{errors::TablebaseError, filesystem::HotPrefixFilesystem};
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -424,54 +423,6 @@ impl Tablebases {
                 .and_then(|o| o.winner())
                 .map(|winner| winner.char()),
         })
-    }
-}
-
-#[derive(Debug, Clone)]
-enum TablebaseError {
-    Fen(ParseFenError),
-    Position(Arc<PositionError<VariantPosition>>),
-    Syzygy(Arc<SyzygyError>),
-}
-
-impl From<ParseFenError> for TablebaseError {
-    fn from(v: ParseFenError) -> TablebaseError {
-        TablebaseError::Fen(v)
-    }
-}
-
-impl From<Arc<PositionError<VariantPosition>>> for TablebaseError {
-    fn from(v: Arc<PositionError<VariantPosition>>) -> TablebaseError {
-        TablebaseError::Position(v)
-    }
-}
-
-impl From<SyzygyError> for TablebaseError {
-    fn from(v: SyzygyError) -> TablebaseError {
-        TablebaseError::Syzygy(Arc::new(v))
-    }
-}
-
-impl IntoResponse for TablebaseError {
-    fn into_response(self) -> Response {
-        (match self {
-            TablebaseError::Fen(err) => (StatusCode::BAD_REQUEST, err.to_string()),
-            TablebaseError::Position(err) => (StatusCode::BAD_REQUEST, err.to_string()),
-            TablebaseError::Syzygy(err) => match *err {
-                SyzygyError::Castling | SyzygyError::TooManyPieces => {
-                    (StatusCode::NOT_FOUND, err.to_string())
-                }
-                SyzygyError::MissingTable { .. } => {
-                    warn!("{err}");
-                    (StatusCode::NOT_FOUND, err.to_string())
-                }
-                SyzygyError::ProbeFailed { .. } => {
-                    error!("{err}");
-                    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-                }
-            },
-        })
-        .into_response()
     }
 }
 
