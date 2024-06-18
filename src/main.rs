@@ -203,29 +203,29 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
 }
 
 async fn serve(opt: Opt) {
-    // Initialize Gaviota tablebase.
-    if !opt.gaviota.is_empty() {
-        unsafe {
-            gaviota::init(&opt.gaviota);
-        }
-    }
-
-    // Prepare custom Syzygy filesystem implementation.
-    let mut filesystem = HotPrefixFilesystem::new();
-    for path in opt.hot_prefix {
-        let n = filesystem
-            .add_directory(&path)
-            .expect("add hot prefix directory");
-        info!(
-            "added {} hot prefix candidate files from {}",
-            n,
-            path.display()
-        );
-    }
-
-    // Initialize Syzygy tablebases.
     let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
+            // Initialize Gaviota tablebase.
+            if !opt.gaviota.is_empty() {
+                unsafe {
+                    gaviota::init(&opt.gaviota);
+                }
+            }
+
+            // Prepare custom Syzygy filesystem implementation.
+            let mut filesystem = HotPrefixFilesystem::new();
+            for path in opt.hot_prefix {
+                let n = filesystem
+                    .add_directory(&path)
+                    .expect("add hot prefix directory");
+                info!(
+                    "added {} hot prefix candidate files from {}",
+                    n,
+                    path.display()
+                );
+            }
+
+            // Initialize Syzygy tablebases.
             let mut tbs = Tablebases::with_filesystem(Arc::new(filesystem));
             for path in opt.standard {
                 let n = tbs
