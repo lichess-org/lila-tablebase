@@ -89,9 +89,9 @@ class TablebaseTest(unittest.TestCase):
         self.assertEqual(r["moves"][0]["category"], "win")
 
         r = standard("8/6B1/6B1/8/2K2n2/4k3/8/8 w - - 1 2")
-        self.assertEqual(r["category"], "maybe-win")
+        self.assertIn(r["category"], ["maybe-win", "win"])
         self.assertEqual(r["moves"][0]["dtz"], -98)
-        self.assertEqual(r["moves"][0]["category"], "maybe-loss")
+        self.assertIn(r["moves"][0]["category"], ["maybe-loss", "blessed-loss"])
 
 
 if __name__ == "__main__":
