@@ -4,11 +4,11 @@ mod errors;
 mod filesystem;
 mod gaviota;
 mod request;
+mod response;
 
 use std::{
-    cmp::{Ordering, Reverse},
+    cmp::Reverse,
     net::SocketAddr,
-    ops::Neg,
     path::PathBuf,
     sync::{
         atomic,
@@ -27,17 +27,13 @@ use axum::{
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
-use serde::Serialize;
-use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{
     san::SanPlus,
-    uci::Uci,
     variant::{Antichess, Atomic, Chess, VariantPosition},
-    Move, Outcome, Position, Role,
+    Move, Outcome, Position,
 };
 use shakmaty_syzygy::{
-    filesystem::Filesystem, AmbiguousWdl, Dtz, MaybeRounded, SyzygyError,
-    Tablebase as SyzygyTablebase,
+    filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
 };
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
@@ -48,164 +44,11 @@ use crate::{
     errors::TablebaseError,
     filesystem::HotPrefixFilesystem,
     request::{TablebaseQuery, TablebaseVariant},
+    response::{
+        Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
+        TablebaseResponse,
+    },
 };
-
-#[derive(Serialize, Debug, Clone)]
-struct TablebaseResponse {
-    #[serde(flatten)]
-    pos: PositionInfo,
-    category: Category,
-    moves: ArrayVec<MoveInfo, 256>,
-}
-
-#[serde_as]
-#[derive(Serialize, Debug, Clone)]
-struct MoveInfo {
-    #[serde_as(as = "DisplayFromStr")]
-    uci: Uci,
-    #[serde_as(as = "DisplayFromStr")]
-    san: SanPlus,
-    zeroing: bool,
-    #[serde(skip)]
-    capture: Option<Role>,
-    #[serde(skip)]
-    promotion: Option<Role>,
-    #[serde(flatten)]
-    pos: PositionInfo,
-    category: Category,
-}
-
-#[serde_as]
-#[derive(Serialize, Debug, Clone)]
-struct PositionInfo {
-    checkmate: bool,
-    stalemate: bool,
-    variant_win: bool,
-    variant_loss: bool,
-    insufficient_material: bool,
-    #[serde_as(as = "Option<FromInto<i32>>")]
-    #[serde(rename = "dtz")]
-    maybe_rounded_dtz: Option<Dtz>,
-    #[serde_as(as = "Option<FromInto<i32>>")]
-    precise_dtz: Option<Dtz>,
-    #[serde(skip)]
-    dtz: Option<MaybeRounded<Dtz>>,
-    dtm: Option<i32>,
-    #[serde(skip)]
-    halfmoves: u32,
-}
-
-impl PositionInfo {
-    fn category(&self, halfmoves_before: u32) -> Category {
-        if !self.variant_win
-            && !self.variant_loss
-            && (self.stalemate
-                || self.insufficient_material
-                || self.dtz.map_or(false, |dtz| dtz.is_zero()))
-        {
-            Category::Draw
-        } else if self.checkmate || self.variant_loss {
-            if halfmoves_before < 100 {
-                Category::Loss
-            } else {
-                Category::BlessedLoss
-            }
-        } else if self.variant_win {
-            if halfmoves_before < 100 {
-                Category::Win
-            } else {
-                Category::CursedWin
-            }
-        } else if let Some(dtz) = self.dtz {
-            if halfmoves_before < 100 {
-                match AmbiguousWdl::from_dtz_and_halfmoves(dtz, self.halfmoves) {
-                    AmbiguousWdl::Win => Category::Win,
-                    AmbiguousWdl::MaybeWin => Category::MaybeWin,
-                    AmbiguousWdl::CursedWin => Category::CursedWin,
-                    AmbiguousWdl::Draw => Category::Draw,
-                    AmbiguousWdl::BlessedLoss => Category::BlessedLoss,
-                    AmbiguousWdl::MaybeLoss => Category::MaybeLoss,
-                    AmbiguousWdl::Loss => Category::Loss,
-                }
-            } else if dtz.is_negative() {
-                Category::BlessedLoss
-            } else {
-                Category::CursedWin
-            }
-        } else {
-            Category::Unknown
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum Category {
-    Loss,
-    Unknown,
-    MaybeLoss,
-    BlessedLoss,
-    Draw,
-    CursedWin,
-    MaybeWin,
-    Win,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-struct PessimisticUnknown(Category); // loss < unknown < maybe-loss < ...
-
-impl Ord for PessimisticUnknown {
-    fn cmp(&self, other: &PessimisticUnknown) -> Ordering {
-        (self.0 as u32).cmp(&(other.0 as u32))
-    }
-}
-
-impl PartialOrd for PessimisticUnknown {
-    fn partial_cmp(&self, other: &PessimisticUnknown) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Neg for Category {
-    type Output = Category;
-
-    fn neg(self) -> Category {
-        match self {
-            Category::Loss => Category::Win,
-            Category::Unknown => Category::Unknown,
-            Category::MaybeLoss => Category::MaybeWin,
-            Category::BlessedLoss => Category::CursedWin,
-            Category::Draw => Category::Draw,
-            Category::CursedWin => Category::BlessedLoss,
-            Category::MaybeWin => Category::MaybeLoss,
-            Category::Win => Category::Loss,
-        }
-    }
-}
-
-#[serde_as]
-#[derive(Serialize, Debug)]
-struct MainlineResponse {
-    mainline: Vec<MainlineStep>,
-    winner: Option<char>,
-    #[serde_as(as = "FromInto<i32>")]
-    dtz: Dtz,
-    #[serde_as(as = "Option<FromInto<i32>>")]
-    precise_dtz: Option<Dtz>,
-}
-
-#[serde_as]
-#[derive(Serialize, Debug)]
-struct MainlineStep {
-    #[serde_as(as = "DisplayFromStr")]
-    uci: Uci,
-    #[serde_as(as = "DisplayFromStr")]
-    san: SanPlus,
-    #[serde_as(as = "FromInto<i32>")]
-    dtz: Dtz,
-    #[serde_as(as = "Option<FromInto<i32>>")]
-    precise_dtz: Option<Dtz>,
-}
 
 #[derive(Debug)]
 struct Tablebases {
