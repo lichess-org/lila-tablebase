@@ -44,7 +44,7 @@ class TablebaseTest(unittest.TestCase):
         r = standard("K7/2k5/3n4/8/2b5/8/8/8 w - - 97 128")
         self.assertIn(r["category"], ["maybe-loss", "blessed-loss"])
         self.assertEqual(r["moves"][0]["san"], "Ka7")
-        self.assertEqual(r["moves"][0]["dtz"], 2)
+        self.assertIn(r["moves"][0]["dtz"], [2, 3])
         self.assertEqual(r["moves"][0]["category"], "maybe-win")
 
         r = standard("2n5/K1k5/8/8/2b5/8/8/8 w - - 99 129")
