@@ -3,6 +3,7 @@
 mod errors;
 mod filesystem;
 mod gaviota;
+mod request;
 
 use std::{
     cmp::{Ordering, Reverse},
@@ -26,14 +27,13 @@ use axum::{
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{
-    fen::Fen,
     san::SanPlus,
     uci::Uci,
-    variant::{Antichess, Atomic, Chess, Variant, VariantPosition},
-    CastlingMode, Move, Outcome, Position, PositionError, Role,
+    variant::{Antichess, Atomic, Chess, VariantPosition},
+    Move, Outcome, Position, Role,
 };
 use shakmaty_syzygy::{
     filesystem::Filesystem, AmbiguousWdl, Dtz, MaybeRounded, SyzygyError,
@@ -44,35 +44,11 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_timing::TimingSubscriber;
 
-use crate::{errors::TablebaseError, filesystem::HotPrefixFilesystem};
-
-#[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[serde(rename_all = "lowercase")]
-enum TablebaseVariant {
-    Standard,
-    Atomic,
-    Antichess,
-}
-
-impl From<TablebaseVariant> for Variant {
-    fn from(variant: TablebaseVariant) -> Variant {
-        match variant {
-            TablebaseVariant::Standard => Variant::Chess,
-            TablebaseVariant::Atomic => Variant::Atomic,
-            TablebaseVariant::Antichess => Variant::Antichess,
-        }
-    }
-}
-
-impl TablebaseVariant {
-    fn position(self, fen: Fen) -> Result<VariantPosition, Arc<PositionError<VariantPosition>>> {
-        VariantPosition::from_setup(self.into(), fen.into_setup(), CastlingMode::Standard)
-            .or_else(PositionError::ignore_invalid_castling_rights)
-            .or_else(PositionError::ignore_invalid_ep_square)
-            .or_else(PositionError::ignore_impossible_check)
-            .map_err(Arc::new)
-    }
-}
+use crate::{
+    errors::TablebaseError,
+    filesystem::HotPrefixFilesystem,
+    request::{TablebaseQuery, TablebaseVariant},
+};
 
 #[derive(Serialize, Debug, Clone)]
 struct TablebaseResponse {
@@ -424,13 +400,6 @@ impl Tablebases {
                 .map(|winner| winner.char()),
         })
     }
-}
-
-#[serde_as]
-#[derive(Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
-struct TablebaseQuery {
-    #[serde_as(as = "DisplayFromStr")]
-    fen: Fen,
 }
 
 fn try_probe(
