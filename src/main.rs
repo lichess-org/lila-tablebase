@@ -29,7 +29,7 @@ use moka::future::Cache;
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
 use tracing::info;
-use tracing_timing::TimingSubscriber;
+use tracing_subscriber::layer::{Layer as _, SubscriberExt as _};
 
 use crate::{
     errors::TablebaseError,
@@ -153,11 +153,11 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
             format!("cache_miss={cache_miss}u"),
         ];
         tracing::dispatcher::get_default(|dispatcher: &tracing::Dispatch| {
-            let subscriber = dispatcher
-                .downcast_ref::<TimingSubscriber>()
+            let timing_layer = dispatcher
+                .downcast_ref::<tracing_timing::TimingLayer>()
                 .expect("timing subscriber");
-            subscriber.force_synchronize();
-            subscriber.with_histograms(|hs| {
+            timing_layer.force_synchronize();
+            timing_layer.with_histograms(|hs| {
                 for (span_group, hs) in hs {
                     let span_group = span_group.replace(' ', "_");
                     if span_group == "dtz_table"
@@ -202,19 +202,7 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
     }
 }
 
-async fn serve() {
-    // Parse arguments.
-    let opt = Opt::parse();
-    if opt.standard.is_empty()
-        && opt.atomic.is_empty()
-        && opt.antichess.is_empty()
-        && opt.gaviota.is_empty()
-    {
-        Opt::command().print_help().expect("usage");
-        println!();
-        return;
-    }
-
+async fn serve(opt: Opt) {
     // Initialize Gaviota tablebase.
     if !opt.gaviota.is_empty() {
         unsafe {
@@ -293,15 +281,36 @@ async fn serve() {
 }
 
 fn main() {
-    let subscriber = tracing_timing::Builder::default()
-        .build(|| tracing_timing::Histogram::new(3).expect("histogram"));
-    let dispatcher = tracing::Dispatch::new(subscriber);
-    tracing::dispatcher::set_global_default(dispatcher).expect("set tracing default dispatcher");
+    // Parse arguments.
+    let opt = Opt::parse();
+    if opt.standard.is_empty()
+        && opt.atomic.is_empty()
+        && opt.antichess.is_empty()
+        && opt.gaviota.is_empty()
+    {
+        Opt::command().print_help().expect("usage");
+        println!();
+        return;
+    }
 
+    // Prepare tracing.
+    let timing_layer = tracing_timing::Builder::default()
+        .layer(|| tracing_timing::Histogram::new(3).expect("histogram"));
+
+    let subscriber = tracing_subscriber::registry().with(timing_layer).with(
+        tracing_subscriber::fmt::layer()
+            .without_time()
+            .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env()),
+    );
+
+    let dispatch = tracing::Dispatch::new(subscriber);
+    tracing::dispatcher::set_global_default(dispatch).expect("tracing dispatch");
+
+    // Start async runtime.
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .max_blocking_threads(128)
         .build()
         .expect("tokio runtime")
-        .block_on(serve());
+        .block_on(serve(opt));
 }

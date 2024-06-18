@@ -26,7 +26,7 @@ serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
 listenfd = "1"
 tower-http = { version = "0.5", features = ["trace"] }
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
 tracing-timing = "0.6"
 libc = "0.2"
