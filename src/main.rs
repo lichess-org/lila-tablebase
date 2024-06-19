@@ -121,7 +121,7 @@ async fn handle_probe(
             .map(Json)
             .map_err(Arc::unwrap_or_clone)
             .inspect(|_| trace!("success"))
-            .inspect_err(|err| dyn_event!(err.tracing_level(), "fail: {}", err))
+            .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
     }
     .instrument(span)
     .await
@@ -157,7 +157,7 @@ async fn handle_mainline(
         .expect("blocking mainline")
         .map(Json)
         .inspect(|_| trace!("success"))
-        .inspect_err(|err| dyn_event!(err.tracing_level(), "fail: {}", err))
+        .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
     }
     .instrument(span)
     .await
