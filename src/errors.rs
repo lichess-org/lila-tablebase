@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use axum::{
     http::StatusCode,
@@ -6,13 +6,49 @@ use axum::{
 };
 use shakmaty::{fen::ParseFenError, variant::VariantPosition, PositionError};
 use shakmaty_syzygy::SyzygyError;
-use tracing::{error, warn};
+
+macro_rules! dyn_event {
+    ($lvl:expr, $($arg:tt)+) => {
+        match $lvl {
+            ::tracing::Level::TRACE => ::tracing::trace!($($arg)+),
+            ::tracing::Level::DEBUG => ::tracing::debug!($($arg)+),
+            ::tracing::Level::INFO => ::tracing::info!($($arg)+),
+            ::tracing::Level::WARN => ::tracing::warn!($($arg)+),
+            ::tracing::Level::ERROR => ::tracing::error!($($arg)+),
+        }
+    };
+}
 
 #[derive(Debug, Clone)]
 pub enum TablebaseError {
     Fen(ParseFenError),
     Position(Arc<PositionError<VariantPosition>>),
     Syzygy(Arc<SyzygyError>),
+}
+
+impl TablebaseError {
+    pub fn tracing_level(&self) -> tracing::Level {
+        match self {
+            TablebaseError::Fen(_) => tracing::Level::WARN,
+            TablebaseError::Position(_) => tracing::Level::WARN,
+            TablebaseError::Syzygy(err) => match **err {
+                SyzygyError::Castling | SyzygyError::TooManyPieces => tracing::Level::INFO,
+                SyzygyError::MissingTable { .. } | SyzygyError::ProbeFailed { .. } => {
+                    tracing::Level::ERROR
+                }
+            },
+        }
+    }
+}
+
+impl fmt::Display for TablebaseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TablebaseError::Fen(err) => err.fmt(f),
+            TablebaseError::Position(err) => err.fmt(f),
+            TablebaseError::Syzygy(err) => err.fmt(f),
+        }
+    }
 }
 
 impl From<ParseFenError> for TablebaseError {
@@ -39,15 +75,10 @@ impl IntoResponse for TablebaseError {
             TablebaseError::Fen(err) => (StatusCode::BAD_REQUEST, err.to_string()),
             TablebaseError::Position(err) => (StatusCode::BAD_REQUEST, err.to_string()),
             TablebaseError::Syzygy(err) => match *err {
-                SyzygyError::Castling | SyzygyError::TooManyPieces => {
-                    (StatusCode::NOT_FOUND, err.to_string())
-                }
-                SyzygyError::MissingTable { .. } => {
-                    warn!("{err}");
-                    (StatusCode::NOT_FOUND, err.to_string())
-                }
+                SyzygyError::Castling
+                | SyzygyError::TooManyPieces
+                | SyzygyError::MissingTable { .. } => (StatusCode::NOT_FOUND, err.to_string()),
                 SyzygyError::ProbeFailed { .. } => {
-                    error!("{err}");
                     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
                 }
             },

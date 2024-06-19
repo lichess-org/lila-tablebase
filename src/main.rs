@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+#[macro_use]
 mod errors;
 mod filesystem;
 mod gaviota;
@@ -28,7 +29,7 @@ use listenfd::ListenFd;
 use moka::future::Cache;
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
-use tracing::{info, info_span, Instrument as _};
+use tracing::{info, info_span, trace, Instrument as _};
 use tracing_subscriber::layer::{Layer as _, SubscriberExt as _};
 
 use crate::{
@@ -119,6 +120,8 @@ async fn handle_probe(
             .await
             .map(Json)
             .map_err(Arc::unwrap_or_clone)
+            .inspect(|_| trace!("success"))
+            .inspect_err(|err| dyn_event!(err.tracing_level(), "fail: {}", err))
     }
     .instrument(span)
     .await
@@ -153,6 +156,8 @@ async fn handle_mainline(
         .await
         .expect("blocking mainline")
         .map(Json)
+        .inspect(|_| trace!("success"))
+        .inspect_err(|err| dyn_event!(err.tracing_level(), "fail: {}", err))
     }
     .instrument(span)
     .await
@@ -318,7 +323,6 @@ fn main() {
     // Prepare tracing.
     let timing_layer = tracing_timing::Builder::default()
         .no_span_recursion()
-        .span_close_events()
         .layer(|| tracing_timing::Histogram::new(3).expect("histogram"));
 
     let subscriber = tracing_subscriber::registry().with(timing_layer).with(
