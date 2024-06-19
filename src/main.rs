@@ -28,7 +28,7 @@ use listenfd::ListenFd;
 use moka::future::Cache;
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{info, info_span, Instrument as _};
 use tracing_subscriber::layer::{Layer as _, SubscriberExt as _};
 
 use crate::{
@@ -88,12 +88,6 @@ fn try_probe(
     variant: TablebaseVariant,
     query: TablebaseQuery,
 ) -> Result<TablebaseResponse, TablebaseError> {
-    match variant {
-        TablebaseVariant::Standard => info!("standard: {}", &query.fen),
-        TablebaseVariant::Atomic => info!("atomic: {}", &query.fen),
-        TablebaseVariant::Antichess => info!("antichess: {}", &query.fen),
-    }
-
     Ok(tbs.probe(&variant.position(query.fen)?)?)
 }
 
@@ -102,17 +96,32 @@ async fn handle_probe(
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Json<TablebaseResponse>, TablebaseError> {
-    app.cache
-        .try_get_with((variant, query.clone()), async move {
-            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
-            let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
-            task::spawn_blocking(move || try_probe(&app.tbs, variant, query))
+    let pieces = query.fen.0.board.occupied().count();
+    let span = match variant {
+        TablebaseVariant::Standard => info_span!("standard request", fen = %query.fen, pieces),
+        TablebaseVariant::Atomic => info_span!("atomic request", fen = %query.fen, pieces),
+        TablebaseVariant::Antichess => info_span!("antichess request", fen = %query.fen, pieces),
+    };
+
+    let blocking_span = span.clone();
+    async move {
+        info!("begin");
+        app.cache
+            .try_get_with((variant, query.clone()), async move {
+                app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
+                let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
+                task::spawn_blocking(move || {
+                    blocking_span.in_scope(|| try_probe(&app.tbs, variant, query))
+                })
                 .await
                 .expect("blocking probe")
-        })
-        .await
-        .map(Json)
-        .map_err(Arc::unwrap_or_clone)
+            })
+            .await
+            .map(Json)
+            .map_err(Arc::unwrap_or_clone)
+    }
+    .instrument(span)
+    .await
 }
 
 fn try_mainline(
@@ -120,12 +129,6 @@ fn try_mainline(
     variant: TablebaseVariant,
     query: TablebaseQuery,
 ) -> Result<MainlineResponse, TablebaseError> {
-    match variant {
-        TablebaseVariant::Standard => info!("standard mainline: {}", &query.fen),
-        TablebaseVariant::Atomic => info!("atomic mainline: {}", &query.fen),
-        TablebaseVariant::Antichess => info!("antichess mainline: {}", &query.fen),
-    }
-
     Ok(tbs.mainline(variant.position(query.fen)?)?)
 }
 
@@ -134,11 +137,25 @@ async fn handle_mainline(
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Json<MainlineResponse>, TablebaseError> {
-    let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
-    task::spawn_blocking(move || try_mainline(&app.tbs, variant, query))
+    let span = match variant {
+        TablebaseVariant::Standard => info_span!("standard mainline request", fen = %query.fen),
+        TablebaseVariant::Atomic => info_span!("atomic mainline request", fen = %query.fen),
+        TablebaseVariant::Antichess => info_span!("antichess mainline request", fen = %query.fen),
+    };
+
+    let blocking_span = span.clone();
+    async move {
+        info!("begin");
+        let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
+        task::spawn_blocking(move || {
+            blocking_span.in_scope(|| try_mainline(&app.tbs, variant, query))
+        })
         .await
         .expect("blocking mainline")
         .map(Json)
+    }
+    .instrument(span)
+    .await
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
@@ -160,9 +177,14 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
             timing_layer.with_histograms(|hs| {
                 for (span_group, hs) in hs {
                     let span_group = span_group.replace(' ', "_");
-                    if span_group == "dtz_table"
+                    if span_group == "standard_request"
+                        || span_group == "atomic_request"
+                        || span_group == "antichess_request"
+                        || span_group == "standard_mainline_request"
+                        || span_group == "atomic_mainline_request"
+                        || span_group == "antichess_mainline_request"
                         || span_group == "wdl_table"
-                        || span_group == "request"
+                        || span_group == "dtz_table"
                     {
                         for (event_group, h) in hs {
                             let event_group = event_group.replace(' ', "_");
@@ -295,6 +317,8 @@ fn main() {
 
     // Prepare tracing.
     let timing_layer = tracing_timing::Builder::default()
+        .no_span_recursion()
+        .span_close_events()
         .layer(|| tracing_timing::Histogram::new(3).expect("histogram"));
 
     let subscriber = tracing_subscriber::registry().with(timing_layer).with(
