@@ -27,6 +27,7 @@ use axum::{
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
+use shakmaty_syzygy::filesystem::OsFilesystem;
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
@@ -194,10 +195,10 @@ async fn serve(opt: Opt) {
             }
 
             // Prepare custom Syzygy filesystem implementation.
-            let mut filesystem = HotPrefixFilesystem::new();
+            let mut filesystem = HotPrefixFilesystem::new(Box::new(OsFilesystem::new()));
             for path in opt.hot_prefix {
                 let n = filesystem
-                    .add_directory(&path)
+                    .add_prefix_directory(&path)
                     .expect("add hot prefix directory");
                 info!(
                     "added {} hot prefix candidate files from {}",

@@ -28,7 +28,6 @@ listenfd = "1"
 tower-http = { version = "0.5", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
-libc = "0.2"
 
 [build-dependencies]
 vergen = { version = "8.2.4", features = ["git", "gitcl"] }
