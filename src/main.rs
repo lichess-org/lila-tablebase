@@ -72,6 +72,10 @@ struct Opt {
     #[arg(long)]
     mmap: bool,
 
+    /// Do not set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files.
+    #[arg(long)]
+    no_advise_random: bool,
+
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
     cache: u64,
@@ -203,9 +207,9 @@ async fn serve(opt: Opt) {
 
             // Prepare custom Syzygy filesystem implementation.
             let mut filesystem = HotPrefixFilesystem::new(if opt.mmap {
-                unsafe { Box::new(MmapFilesystem::new()) }
+                unsafe { Box::new(MmapFilesystem::new().with_advise_random(!opt.no_advise_random)) }
             } else {
-                Box::new(OsFilesystem::new())
+                Box::new(OsFilesystem::new().with_advise_random(!opt.no_advise_random))
             });
             for path in opt.hot_prefix {
                 let n = filesystem

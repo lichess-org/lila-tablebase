@@ -1302,7 +1302,7 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.25.0"
-source = "git+https://github.com/niklasf/shakmaty-syzygy#8a1c1c378778587b10f118cb1898021da70f4f29"
+source = "git+https://github.com/niklasf/shakmaty-syzygy#c2194839df416c0ade71472986f8f96ad1747dd9"
 dependencies = [
  "arrayvec",
  "bitflags",
