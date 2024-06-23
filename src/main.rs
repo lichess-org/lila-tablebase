@@ -30,7 +30,6 @@ use moka::future::Cache;
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
-use tracing_subscriber::layer::{Layer as _, SubscriberExt as _};
 
 use crate::{
     errors::TablebaseError,
@@ -170,55 +169,10 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
     {
         let cache = app.cache.entry_count();
         let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
-        let mut metrics = vec![
+        let metrics = &[
             format!("cache={cache}u"),
             format!("cache_miss={cache_miss}u"),
         ];
-        tracing::dispatcher::get_default(|dispatcher: &tracing::Dispatch| {
-            let timing_layer = dispatcher
-                .downcast_ref::<tracing_timing::TimingLayer>()
-                .expect("timing subscriber");
-            timing_layer.force_synchronize();
-            timing_layer.with_histograms(|hs| {
-                for (span_group, hs) in hs {
-                    let span_group = span_group.replace(' ', "_");
-                    if span_group == "standard_request"
-                        || span_group == "atomic_request"
-                        || span_group == "antichess_request"
-                        || span_group == "standard_mainline_request"
-                        || span_group == "atomic_mainline_request"
-                        || span_group == "antichess_mainline_request"
-                        || span_group == "wdl_table"
-                        || span_group == "dtz_table"
-                    {
-                        for (event_group, h) in hs {
-                            let event_group = event_group.replace(' ', "_");
-                            metrics.extend([
-                                format!("{span_group}_{event_group}_count={}u", h.len()),
-                                format!(
-                                    "{span_group}_{event_group}_p50={}u",
-                                    h.value_at_quantile(0.50)
-                                ),
-                                format!(
-                                    "{span_group}_{event_group}_p90={}u",
-                                    h.value_at_quantile(0.90)
-                                ),
-                                format!(
-                                    "{span_group}_{event_group}_p99={}u",
-                                    h.value_at_quantile(0.99)
-                                ),
-                                format!(
-                                    "{span_group}_{event_group}_p999={}u",
-                                    h.value_at_quantile(0.999)
-                                ),
-                                format!("{span_group}_{event_group}_max={}u", h.max()),
-                            ]);
-                            h.reset();
-                        }
-                    }
-                }
-            });
-        });
         format!("tablebase {}", metrics.join(","))
     } else {
         format!(
@@ -321,18 +275,11 @@ fn main() {
     }
 
     // Prepare tracing.
-    let timing_layer = tracing_timing::Builder::default()
-        .no_span_recursion()
-        .layer(|| tracing_timing::Histogram::new(3).expect("histogram"));
-
-    let subscriber = tracing_subscriber::registry().with(timing_layer).with(
-        tracing_subscriber::fmt::layer()
-            .without_time()
-            .with_filter(tracing_subscriber::filter::EnvFilter::from_default_env()),
-    );
-
-    let dispatch = tracing::Dispatch::new(subscriber);
-    tracing::dispatcher::set_global_default(dispatch).expect("tracing dispatch");
+    tracing_subscriber::fmt()
+        .event_format(tracing_subscriber::fmt::format().compact())
+        .without_time()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     // Start async runtime.
     tokio::runtime::Builder::new_multi_thread()
