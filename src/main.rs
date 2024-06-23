@@ -27,7 +27,7 @@ use axum::{
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
-use shakmaty_syzygy::filesystem::OsFilesystem;
+use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
 use tokio::{net::TcpListener, sync::Semaphore, task};
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
@@ -64,6 +64,13 @@ struct Opt {
     /// and the block length table.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     hot_prefix: Vec<PathBuf>,
+
+    /// Use memory maps to read table files.
+    ///
+    /// May crash on I/O errors, and cause undefined behavior when open table
+    /// files are modified.
+    #[arg(long)]
+    mmap: bool,
 
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
@@ -195,7 +202,11 @@ async fn serve(opt: Opt) {
             }
 
             // Prepare custom Syzygy filesystem implementation.
-            let mut filesystem = HotPrefixFilesystem::new(Box::new(OsFilesystem::new()));
+            let mut filesystem = HotPrefixFilesystem::new(if opt.mmap {
+                unsafe { Box::new(MmapFilesystem::new()) }
+            } else {
+                Box::new(OsFilesystem::new())
+            });
             for path in opt.hot_prefix {
                 let n = filesystem
                     .add_prefix_directory(&path)
