@@ -28,7 +28,7 @@ use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
 use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
-use tokio::{net::TcpListener, sync::Semaphore, task};
+use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
 
@@ -89,19 +89,10 @@ struct AppState {
     tbs: Tablebases,
     cache: TablebaseCache,
     cache_miss: AtomicU64,
-    semaphore: Semaphore,
     deploy_event_sent: AtomicBool,
 }
 
 type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
-
-fn try_probe(
-    tbs: &Tablebases,
-    variant: TablebaseVariant,
-    query: TablebaseQuery,
-) -> Result<TablebaseResponse, TablebaseError> {
-    Ok(tbs.probe(&variant.position(query.fen)?)?)
-}
 
 async fn handle_probe(
     State(app): State<&'static AppState>,
@@ -115,35 +106,20 @@ async fn handle_probe(
         TablebaseVariant::Antichess => info_span!("antichess request", fen = %query.fen, pieces),
     };
 
-    let blocking_span = span.clone();
-    async move {
-        info!("begin");
-        app.cache
-            .try_get_with((variant, query.clone()), async move {
-                app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
-                let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
-                task::spawn_blocking(move || {
-                    blocking_span.in_scope(|| try_probe(&app.tbs, variant, query))
-                })
+    app.cache
+        .try_get_with((variant, query.clone()), async move {
+            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
+            app.tbs
+                .probe(variant.position(query.fen)?)
                 .await
-                .expect("blocking probe")
-            })
-            .await
-            .map(Json)
-            .map_err(Arc::unwrap_or_clone)
-            .inspect(|_| trace!("success"))
-            .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
-    }
-    .instrument(span)
-    .await
-}
-
-fn try_mainline(
-    tbs: &Tablebases,
-    variant: TablebaseVariant,
-    query: TablebaseQuery,
-) -> Result<MainlineResponse, TablebaseError> {
-    Ok(tbs.mainline(variant.position(query.fen)?)?)
+                .map_err(TablebaseError::from)
+        })
+        .instrument(span)
+        .await
+        .map(Json)
+        .map_err(Arc::unwrap_or_clone)
+        .inspect(|_| trace!("success"))
+        .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
 }
 
 async fn handle_mainline(
@@ -157,21 +133,14 @@ async fn handle_mainline(
         TablebaseVariant::Antichess => info_span!("antichess mainline request", fen = %query.fen),
     };
 
-    let blocking_span = span.clone();
-    async move {
-        info!("begin");
-        let _permit = app.semaphore.acquire().await.expect("semaphore not closed");
-        task::spawn_blocking(move || {
-            blocking_span.in_scope(|| try_mainline(&app.tbs, variant, query))
-        })
+    app.tbs
+        .mainline(variant.position(query.fen)?)
+        .instrument(span)
         .await
-        .expect("blocking mainline")
         .map(Json)
+        .map_err(TablebaseError::from)
         .inspect(|_| trace!("success"))
         .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
-    }
-    .instrument(span)
-    .await
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
@@ -252,7 +221,6 @@ async fn serve(opt: Opt) {
             .time_to_idle(Duration::from_secs(60 * 5))
             .build(),
         cache_miss: AtomicU64::new(0),
-        semaphore: Semaphore::new(128),
         deploy_event_sent: AtomicBool::new(false),
     }));
 

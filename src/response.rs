@@ -1,6 +1,5 @@
 use std::{cmp::Ordering, ops::Neg};
 
-use arrayvec::ArrayVec;
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{san::SanPlus, uci::Uci, Role};
@@ -11,7 +10,7 @@ pub struct TablebaseResponse {
     #[serde(flatten)]
     pub pos: PositionInfo,
     pub category: Category,
-    pub moves: ArrayVec<MoveInfo, 256>,
+    pub moves: Vec<MoveInfo>,
 }
 
 #[serde_as]

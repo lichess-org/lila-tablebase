@@ -1,6 +1,5 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use arrayvec::ArrayVec;
 use shakmaty::{
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
@@ -9,6 +8,8 @@ use shakmaty::{
 use shakmaty_syzygy::{
     filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
 };
+use tokio::{sync::Semaphore, task};
+use tracing::info;
 
 use crate::{
     gaviota,
@@ -23,6 +24,7 @@ pub struct Tablebases {
     pub standard: SyzygyTablebase<Chess>,
     pub atomic: SyzygyTablebase<Atomic>,
     pub antichess: SyzygyTablebase<Antichess>,
+    semaphore: Semaphore,
 }
 
 impl Tablebases {
@@ -31,10 +33,11 @@ impl Tablebases {
             standard: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
             atomic: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
             antichess: SyzygyTablebase::with_filesystem(fs),
+            semaphore: Semaphore::new(128),
         }
     }
 
-    fn probe_dtz(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
+    fn probe_dtz_blocking(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
         match *pos {
             VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos),
             VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
@@ -43,7 +46,7 @@ impl Tablebases {
         }
     }
 
-    fn best_move(
+    fn best_move_blocking(
         &self,
         pos: &VariantPosition,
     ) -> Result<Option<(Move, MaybeRounded<Dtz>)>, SyzygyError> {
@@ -55,13 +58,13 @@ impl Tablebases {
         }
     }
 
-    fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
+    fn position_info_blocking(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
             Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
             _ => (false, false),
         };
 
-        let dtz = match self.probe_dtz(pos) {
+        let dtz = match self.probe_dtz_blocking(pos) {
             Err(
                 SyzygyError::Castling
                 | SyzygyError::TooManyPieces
@@ -85,30 +88,50 @@ impl Tablebases {
         })
     }
 
-    pub fn probe(&self, pos: &VariantPosition) -> Result<TablebaseResponse, SyzygyError> {
+    pub async fn probe(
+        &'static self,
+        pos: VariantPosition,
+    ) -> Result<TablebaseResponse, SyzygyError> {
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .expect("semaphore not closed");
+        info!("begin");
+
         let halfmoves = pos.halfmoves();
 
-        let mut move_info = pos
+        let move_info_handles = pos
             .legal_moves()
-            .iter()
+            .into_iter()
             .map(|m| {
+                let uci = m.to_uci(pos.castles().mode());
+
                 let mut after = pos.clone();
-                after.play_unchecked(m);
+                let san = SanPlus::from_move_and_play_unchecked(&mut after, &m);
 
-                let after_info = self.position_info(&after)?;
+                task::spawn_blocking(move || {
+                    let after_info = self.position_info_blocking(&after)?;
 
-                Ok(MoveInfo {
-                    uci: m.to_uci(pos.castles().mode()),
-                    san: SanPlus::from_move(pos.clone(), m),
-                    capture: m.capture(),
-                    promotion: m.promotion(),
-                    zeroing: m.is_zeroing(),
-                    category: after_info.category(halfmoves),
-                    pos: after_info,
+                    Ok(MoveInfo {
+                        uci,
+                        san,
+                        capture: m.capture(),
+                        promotion: m.promotion(),
+                        zeroing: m.is_zeroing(),
+                        category: after_info.category(halfmoves),
+                        pos: after_info,
+                    })
                 })
             })
-            .collect::<Result<ArrayVec<_, 256>, SyzygyError>>()?;
+            .collect::<Vec<_>>();
 
+        let pos_info_handle = task::spawn_blocking(move || self.position_info_blocking(&pos));
+
+        let mut move_info = Vec::with_capacity(move_info_handles.len());
+        for handle in move_info_handles {
+            move_info.push(handle.await.expect("move info")?);
+        }
         move_info.sort_by_key(|m: &MoveInfo| {
             (
                 PessimisticUnknown(m.category),
@@ -154,7 +177,7 @@ impl Tablebases {
             )
         });
 
-        let pos_info = self.position_info(pos)?;
+        let pos_info = pos_info_handle.await.expect("pos info")?;
         let category = pos_info.category(halfmoves.saturating_sub(1));
 
         // Use category of previous position to infer maybe-win / maybe-loss,
@@ -190,13 +213,13 @@ impl Tablebases {
         })
     }
 
-    pub fn mainline(&self, mut pos: VariantPosition) -> Result<MainlineResponse, SyzygyError> {
-        let dtz = self.probe_dtz(&pos)?;
+    fn mainline_blocking(&self, mut pos: VariantPosition) -> Result<MainlineResponse, SyzygyError> {
+        let dtz = self.probe_dtz_blocking(&pos)?;
         let mut mainline = Vec::new();
 
         if !dtz.is_zero() {
             while pos.halfmoves() < 100 {
-                if let Some((m, dtz)) = self.best_move(&pos)? {
+                if let Some((m, dtz)) = self.best_move_blocking(&pos)? {
                     mainline.push(MainlineStep {
                         uci: m.to_uci(pos.castles().mode()),
                         dtz: dtz.ignore_rounding(),
@@ -218,5 +241,21 @@ impl Tablebases {
                 .and_then(|o| o.winner())
                 .map(|winner| winner.char()),
         })
+    }
+
+    pub async fn mainline(
+        &'static self,
+        pos: VariantPosition,
+    ) -> Result<MainlineResponse, SyzygyError> {
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .expect("semaphore not closed");
+        info!("begin");
+
+        task::spawn_blocking(move || self.mainline_blocking(pos))
+            .await
+            .expect("mainline blocking")
     }
 }
