@@ -57,24 +57,29 @@ struct Opt {
 
     /// Directory with prefix files.
     ///
-    /// For a table named KRvK.rtbw, a corresponding prefix file named
-    /// KRvK.rtbw.prefix will be used if present. It can contain any number of
-    /// bytes from the start of the original table file. Storing the prefix
-    /// file on a faster medium may speed up acccess to the sparse block index
-    /// and the block length table.
+    /// For example, for a table named KRvK.rtbw, a corresponding prefix file
+    /// named KRvK.rtbw.prefix would be used if present. It can contain any
+    /// number of bytes from the start of the original table file.
+    ///
+    /// This is particularly useful to speed up access to the table header,
+    /// sparse block index, and block length table, by storing them on
+    /// a faster medium.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     hot_prefix: Vec<PathBuf>,
 
     /// Use memory maps to read table files.
     ///
     /// May crash on I/O errors, and cause undefined behavior when open table
-    /// files are modified.
+    /// files are modified. May harm performance when using HDDs.
     #[arg(long)]
     mmap: bool,
 
-    /// Do not set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files.
+    /// Set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files.
+    ///
+    /// Use only after benchmarking the specific setup. Performance may be
+    /// harmed or improved.
     #[arg(long)]
-    no_advise_random: bool,
+    advise_random: bool,
 
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
@@ -176,9 +181,9 @@ async fn serve(opt: Opt) {
 
             // Prepare custom Syzygy filesystem implementation.
             let mut filesystem = HotPrefixFilesystem::new(if opt.mmap {
-                unsafe { Box::new(MmapFilesystem::new().with_advise_random(!opt.no_advise_random)) }
+                unsafe { Box::new(MmapFilesystem::new().with_advise_random(opt.advise_random)) }
             } else {
-                Box::new(OsFilesystem::new().with_advise_random(!opt.no_advise_random))
+                Box::new(OsFilesystem::new().with_advise_random(opt.advise_random))
             });
             for path in opt.hot_prefix {
                 let n = filesystem
