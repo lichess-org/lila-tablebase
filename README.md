@@ -8,18 +8,19 @@ Usage
 -----
 
 ```
-lila-tablebase
+Usage: lila-tablebase [OPTIONS]
 
-USAGE:
-    lila-tablebase [OPTIONS]
-
-OPTIONS:
-        --standard <STANDARD>...      Directory with tablebase files for standard chess
-        --antichess <ANTICHESS>...    Directory with tablebase files for antichess
-        --atomic <ATOMIC>...          Directory with tablebase files for atomic chess
-        --gaviota <GAVIOTA>...        Directory with Gaviota tablebase files
-        --bind <BIND>                 Listen on this socket address [default: 127.0.0.1:9000]
-    -h, --help                        Print help information
+Options:
+      --standard <STANDARD>      Directory with tablebase files for standard chess
+      --atomic <ATOMIC>          Directory with tablebase files for atomic chess
+      --antichess <ANTICHESS>    Directory with tablebase files for antichess
+      --gaviota <GAVIOTA>        Directory with Gaviota tablebase files
+      --hot-prefix <HOT_PREFIX>  Directory with prefix files
+      --mmap                     Use memory maps to read table files
+      --advise-random            Set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files
+      --cache <CACHE>            Maximum number of cached responses [default: 20000]
+      --bind <BIND>              Listen on this socket address [default: 127.0.0.1:9000]
+  -h, --help                     Print help (see more with '--help')
 ```
 
 HTTP API
