@@ -3,9 +3,13 @@
 """
 Extract hot syzygy table prefixes.
 
-Expected totals:
-Including sparse index:   50 080 907 852 bytes
-Including block lengths: 413 865 080 576 bytes
+Expected total sizes in bytes:
+
+                | wdl               | dtz               | total
+--------------- | ----------------- | ----------------- | ------------------
+--sparse-index  |    40 698 182 940 |     9 378 225 430 |    376 030 409 052
+--block-lengths |   335 332 226 112 |    78 502 676 480 |    413 834 902 592
+cp              | 9 389 976 132 976 | 9 160 137 566 384 | 18 550 113 699 360
 """
 
 import argparse
