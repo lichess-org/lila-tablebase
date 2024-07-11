@@ -2,7 +2,7 @@ use std::{cmp::Ordering, ops::Neg};
 
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr, FromInto};
-use shakmaty::{san::SanPlus, uci::Uci, Role};
+use shakmaty::{san::SanPlus, uci::UciMove, Role};
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded};
 
 #[derive(Serialize, Debug, Clone)]
@@ -17,7 +17,7 @@ pub struct TablebaseResponse {
 #[derive(Serialize, Debug, Clone)]
 pub struct MoveInfo {
     #[serde_as(as = "DisplayFromStr")]
-    pub uci: Uci,
+    pub uci: UciMove,
     #[serde_as(as = "DisplayFromStr")]
     pub san: SanPlus,
     pub zeroing: bool,
@@ -153,7 +153,7 @@ pub struct MainlineResponse {
 #[derive(Serialize, Debug)]
 pub struct MainlineStep {
     #[serde_as(as = "DisplayFromStr")]
-    pub uci: Uci,
+    pub uci: UciMove,
     #[serde_as(as = "DisplayFromStr")]
     pub san: SanPlus,
     #[serde_as(as = "FromInto<i32>")]
