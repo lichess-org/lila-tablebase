@@ -41,6 +41,7 @@ name | type | default | description
   "dtz": 1, // dtz50'' with rounding or null if unknown
   "precise_dtz": 1, // dtz50'' (only if guaranteed to be not rounded) or null if unknown
   "dtm": 17, // depth to mate or null if unknown
+  "dtw": null, // depth to antichess win or null if unknown
   "checkmate": false,
   "stalemate": false,
   "variant_win": false, // only in chess variants (atomic, antichess)
@@ -54,6 +55,7 @@ name | type | default | description
       "dtz": -2,
       "precise_dtz": -2,
       "dtm": -16,
+      "dtw": null,
       "zeroing": true,
       "checkmate": false,
       "stalemate": false,
