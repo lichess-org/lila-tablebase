@@ -92,12 +92,12 @@ dependencies = [
 
 [[package]]
 name = "antichess-tb-sys"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "953d5b792a697f96009081618ebfe870194411036e79831fd45f503109e52197"
+version = "0.1.1"
+source = "git+https://github.com/niklasf/rust-antichess-tb-sys#d2d8967888271a7ac5425ad24b48ebb1a7270216"
 dependencies = [
  "bindgen",
  "cc",
+ "libz-sys",
  "tap",
 ]
 
@@ -226,7 +226,6 @@ dependencies = [
  "itertools",
  "lazy_static",
  "lazycell",
- "log",
  "proc-macro2",
  "quote",
  "regex",
@@ -540,8 +539,7 @@ dependencies = [
 [[package]]
 name = "gaviota-sys"
 version = "0.1.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b94cbe51dac650e4772432409d00097d55b9f3b0012796116526c69be8e6888"
+source = "git+https://github.com/niklasf/rust-gaviota-sys#3a28cba46bc8e357b76e4b8bc150dd4046762fc6"
 dependencies = [
  "bindgen",
  "cc",

@@ -19,7 +19,7 @@ serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 shakmaty = "0.27"
 shakmaty-syzygy = { version = "0.25", features = ["variant", "mmap"] }
-gaviota-sys = "0.1"
+gaviota-sys = {version = "0.1", git = "https://github.com/niklasf/rust-gaviota-sys" }
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
@@ -27,4 +27,4 @@ listenfd = "1"
 tower-http = { version = "0.5", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
-antichess-tb-sys = "0.1"
+antichess-tb-sys = { version = "0.1", git = "https://github.com/niklasf/rust-antichess-tb-sys" }
