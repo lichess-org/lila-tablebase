@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - bwrdd
-          - terra
 
 jobs:
   build:
