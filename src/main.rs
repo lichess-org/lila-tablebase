@@ -12,11 +12,7 @@ mod tablebases;
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    sync::{
-        atomic,
-        atomic::{AtomicBool, AtomicU64},
-        Arc,
-    },
+    sync::{atomic, atomic::AtomicU64, Arc},
     time::Duration,
 };
 
@@ -98,7 +94,6 @@ struct AppState {
     tbs: Tablebases,
     cache: TablebaseCache,
     cache_miss: AtomicU64,
-    deploy_event_sent: AtomicBool,
 }
 
 type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
@@ -153,24 +148,13 @@ async fn handle_mainline(
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
-    if app
-        .deploy_event_sent
-        .fetch_or(true, atomic::Ordering::Relaxed)
-    {
-        let cache = app.cache.entry_count();
-        let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
-        let metrics = &[
-            format!("cache={cache}u"),
-            format!("cache_miss={cache_miss}u"),
-        ];
-        format!("tablebase {}", metrics.join(","))
-    } else {
-        format!(
-            "event,program=lila-tablebase commit={:?},text={:?}",
-            env!("VERGEN_GIT_SHA"),
-            env!("VERGEN_GIT_COMMIT_MESSAGE")
-        )
-    }
+    let cache = app.cache.entry_count();
+    let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
+    let metrics = &[
+        format!("cache={cache}u"),
+        format!("cache_miss={cache_miss}u"),
+    ];
+    format!("tablebase {}", metrics.join(","))
 }
 
 async fn serve(opt: Opt) {
@@ -233,7 +217,6 @@ async fn serve(opt: Opt) {
             .time_to_idle(Duration::from_secs(60 * 5))
             .build(),
         cache_miss: AtomicU64::new(0),
-        deploy_event_sent: AtomicBool::new(false),
     }));
 
     let app = Router::new()

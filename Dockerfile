@@ -1,7 +1,7 @@
 FROM docker.io/alpine:3 AS builder
 WORKDIR /lila-tablebase
 RUN apk --no-cache add cargo clang-libclang g++
-COPY Cargo.toml Cargo.lock build.rs .
+COPY Cargo.toml Cargo.lock .
 COPY src src
 RUN cargo build --release
 

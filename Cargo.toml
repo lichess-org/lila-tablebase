@@ -11,7 +11,6 @@ authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
 categories = ["games"]
 keywords = ["chess", "syzygy", "tablebase"]
 edition = "2021"
-build = "build.rs"
 
 [dependencies]
 axum = "0.7"
@@ -29,6 +28,3 @@ tower-http = { version = "0.5", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
 antichess-tb-sys = "0.1"
-
-[build-dependencies]
-vergen-gitcl = "1"
