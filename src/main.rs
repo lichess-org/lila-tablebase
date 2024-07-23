@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod errors;
+mod antichess_tb;
 mod filesystem;
 mod gaviota;
 mod request;
@@ -42,15 +43,18 @@ use crate::{
 
 #[derive(Parser, Debug)]
 struct Opt {
-    /// Directory with tablebase files for standard chess.
+    /// Directory with Syzygy tablebase files for standard chess.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     standard: Vec<PathBuf>,
-    /// Directory with tablebase files for atomic chess.
+    /// Directory with Syzygy tablebase files for atomic chess.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     atomic: Vec<PathBuf>,
-    /// Directory with tablebase files for antichess.
+    /// Directory with Syzygy tablebase files for antichess.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     antichess: Vec<PathBuf>,
+    /// Directory with DTW tablebase files for antichess.
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
+    antichess_tb: Vec<PathBuf>,
     /// Directory with Gaviota tablebase files.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     gaviota: Vec<PathBuf>,
@@ -173,10 +177,13 @@ async fn serve(opt: Opt) {
     let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
             // Initialize Gaviota tablebase.
-            if !opt.gaviota.is_empty() {
-                unsafe {
-                    gaviota::init(&opt.gaviota);
-                }
+            unsafe {
+                gaviota::init(&opt.gaviota);
+            }
+
+            // Initialize Antichess tablebase.
+            unsafe {
+                antichess_tb::init(&opt.antichess_tb);
             }
 
             // Prepare custom Syzygy filesystem implementation.

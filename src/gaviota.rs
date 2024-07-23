@@ -2,7 +2,6 @@ use std::{
     ffi::CString,
     os::raw::{c_int, c_uchar, c_uint},
     path::PathBuf,
-    ptr,
 };
 
 use arrayvec::ArrayVec;
@@ -11,7 +10,11 @@ use tracing::warn;
 
 pub unsafe fn init(directories: &[PathBuf]) {
     unsafe {
-        assert!(gaviota_sys::tbcache_init(1014 * 1024, 50) != 0);
+        assert_ne!(
+            gaviota_sys::tbcache_init(1014 * 1024, 50),
+            0,
+            "tbcache_init"
+        );
 
         let mut paths = gaviota_sys::tbpaths_init();
         assert!(!paths.is_null());
@@ -19,16 +22,19 @@ pub unsafe fn init(directories: &[PathBuf]) {
         for path in directories {
             let path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
             paths = gaviota_sys::tbpaths_add(paths, path.as_ptr());
-            assert!(!paths.is_null());
+            assert!(!paths.is_null(), "tbpaths_add");
             drop(path);
         }
 
-        assert!(!gaviota_sys::tb_init(
-            1,
-            gaviota_sys::TB_compression_scheme::tb_CP4 as c_int,
-            paths
-        )
-        .is_null());
+        assert!(
+            !gaviota_sys::tb_init(
+                1,
+                gaviota_sys::TB_compression_scheme::tb_CP4 as c_int,
+                paths
+            )
+            .is_null(),
+            "tb_init"
+        );
     }
 }
 
@@ -38,10 +44,6 @@ pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     };
 
     if pos.board().occupied().count() > 5 || pos.castles().any() {
-        return None;
-    }
-
-    if unsafe { gaviota_sys::tb_is_initialized() } == 0 {
         return None;
     }
 
@@ -79,8 +81,8 @@ pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
             bs.as_ptr(),
             wp.as_ptr(),
             bp.as_ptr(),
-            ptr::addr_of_mut!(info),
-            ptr::addr_of_mut!(plies),
+            &mut info,
+            &mut plies,
         )
     };
 

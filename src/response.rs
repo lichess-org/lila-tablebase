@@ -46,6 +46,7 @@ pub struct PositionInfo {
     #[serde(skip)]
     pub dtz: Option<MaybeRounded<Dtz>>,
     pub dtm: Option<i32>,
+    pub dtw: Option<i32>,
     #[serde(skip)]
     pub halfmoves: u32,
 }

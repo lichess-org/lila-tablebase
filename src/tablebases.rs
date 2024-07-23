@@ -12,7 +12,7 @@ use tokio::{sync::Semaphore, task};
 use tracing::info;
 
 use crate::{
-    gaviota,
+    antichess_tb, gaviota,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
         TablebaseResponse,
@@ -84,6 +84,7 @@ impl Tablebases {
             precise_dtz: dtz.and_then(MaybeRounded::precise),
             dtz,
             dtm: unsafe { gaviota::probe_dtm(pos) },
+            dtw: unsafe { antichess_tb::probe_dtw(pos) },
             halfmoves: pos.halfmoves(),
         })
     }
@@ -149,7 +150,7 @@ impl Tablebases {
                     .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                     .is_negative()
                 {
-                    Reverse(m.pos.dtm)
+                    Reverse(m.pos.dtm.or(m.pos.dtw))
                 } else {
                     Reverse(None)
                 },
@@ -158,7 +159,7 @@ impl Tablebases {
                     .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                     .is_positive()
                 {
-                    m.pos.dtm.map(Reverse)
+                    m.pos.dtm.or(m.pos.dtw).map(Reverse)
                 } else {
                     None
                 },
