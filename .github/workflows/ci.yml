@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   push:
@@ -17,15 +17,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
         with:
-          targets: x86_64-unknown-linux-musl
-      - run: cargo build --release --target x86_64-unknown-linux-musl
+          cache-from: type=gha
+          cache-to: type=gha
+          outputs: type=local,dest=dist
       - uses: actions/upload-artifact@v4
         with:
           name: lila-tablebase
-          path: target/x86_64-unknown-linux-musl/release/lila-tablebase
+          path: dist/usr/local/bin/lila-tablebase
   deploy:
     runs-on: ubuntu-latest
     environment:
