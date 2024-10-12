@@ -4,25 +4,17 @@ lila-tablebase
 Tablebase server for [lichess.org](https://tablebase.lichess.ovh),
 based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy).
 
+Blog posts
+----------
+
+- [Optimizing the tablebase server](https://lichess.org/@/revoof/blog/optimizing-the-tablebase-server/MetV0ZQd)
+- [7 piece tablebases are complete](https://lichess.org/@/lichess/blog/7-piece-syzygy-tablebases-are-complete/W3WeMyQA)
+
 Usage
 -----
 
 ```
-Usage: lila-tablebase [OPTIONS]
-
-Options:
-      --standard <STANDARD>          Directory with Syzygy tablebase files for standard chess
-      --atomic <ATOMIC>              Directory with Syzygy tablebase files for atomic chess
-      --antichess <ANTICHESS>        Directory with Syzygy tablebase files for antichess
-      --antichess-tb <ANTICHESS_TB>  Directory with DTW tablebase files for antichess
-      --gaviota <GAVIOTA>            Directory with Gaviota tablebase files
-
-      --hot-prefix <HOT_PREFIX>      Directory with prefix files
-      --mmap                         Use memory maps to read table files
-      --advise-random                Set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files
-      --cache <CACHE>                Maximum number of cached responses [default: 20000]
-      --bind <BIND>                  Listen on this socket address [default: 127.0.0.1:9000]
-  -h, --help                         Print help (see more with '--help')
+cargo run --release -- --help
 ```
 
 HTTP API
