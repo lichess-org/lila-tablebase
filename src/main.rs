@@ -221,8 +221,8 @@ async fn serve(opt: Opt) {
 
     let app = Router::new()
         .route("/monitor", get(handle_monitor))
-        .route("/:variant", get(handle_probe))
-        .route("/:variant/mainline", get(handle_mainline))
+        .route("/{variant}", get(handle_probe))
+        .route("/{variant}/mainline", get(handle_mainline))
         .with_state(state)
         .layer(TraceLayer::new_for_http());
 

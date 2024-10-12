@@ -13,18 +13,18 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2021"
 
 [dependencies]
-axum = "0.7"
+axum = "0.8.0-alpha.1"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 shakmaty = "0.27"
 shakmaty-syzygy = { version = "0.25", features = ["variant", "mmap"] }
-gaviota-sys = {version = "0.1", git = "https://github.com/niklasf/rust-gaviota-sys" }
+gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
 listenfd = "1"
-tower-http = { version = "0.5", features = ["trace"] }
+tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
-antichess-tb-sys = { version = "0.1", git = "https://github.com/niklasf/rust-antichess-tb-sys" }
+antichess-tb-sys = "0.1"
