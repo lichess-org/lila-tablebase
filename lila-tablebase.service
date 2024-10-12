@@ -6,20 +6,18 @@ After=network.target
 LimitNOFILE=83368
 User=www-data
 Group=www-data
-Environment=RUST_LOG=lila_tablebase=info
+Environment=RUST_LOG=info
 ExecStart=/usr/local/bin/lila-tablebase \
-  --standard /home/tables/standard/3-4-5-wdl \
-  --standard /home/tables/standard/3-4-5-dtz-nr \
-  --standard /home/tables/standard/6-wdl \
+  --standard /home/hot-tables/standard/3-4-5-wdl \
+  --standard /home/hot-tables/standard/3-4-5-dtz-nr \
+  --standard /home/hot-tables/standard/6-wdl \
   --standard /home/tables/standard/6-dtz-nr \
-  --standard /home/tables/standard/7-wdl \
-  --standard /home/tables/standard/7-dtz \
-  --hot-prefix /home/hot-tables/standard/3-4-5-wdl \
-  --hot-prefix /home/hot-tables/standard/3-4-5-dtz-nr \
-  --hot-prefix /home/hot-tables/standard/6-wdl \
-  --hot-prefix /home/hot-tables/standard/6-dtz-nr \
-  --hot-prefix /home/hot-tables/standard/7-wdl \
-  --hot-prefix /home/hot-tables/standard/7-dtz \
+  --standard /home/tables/standard/7/4v3_pawnful \
+  --standard /home/tables/standard/7/4v3_pawnless \
+  --standard /home/tables/standard/7/5v2_pawnful \
+  --standard /home/tables/standard/7/5v2_pawnless \
+  --standard /home/tables/standard/7/6v1_pawnful \
+  --standard /home/tables/standard/7/6v1_pawnless \
   --gaviota /home/hot-tables/standard/Gaviota \
   --atomic /home/tables/atomic/3-4-5 \
   --atomic /home/tables/atomic/6-wdl \
@@ -27,7 +25,10 @@ ExecStart=/usr/local/bin/lila-tablebase \
   --antichess /home/tables/antichess/2-3-4-5-pawnless \
   --antichess /home/tables/antichess/2-3-4-5-giveaway \
   --antichess /home/tables/antichess/6-pawnless \
-  --antichess /home/tables/antichess/6-giveaway
+  --antichess /home/tables/antichess/6-giveaway \
+  --antichess-tb /home/hot-tables/antichess/antichess-tb \
+  --hot-prefix /home/hot-tables/standard/6-dtz-nr \
+  --hot-prefix /home/hot-tables/standard/7
 PrivateTmp=true
 PrivateDevices=true
 DevicePolicy=closed
