@@ -28,3 +28,6 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
 antichess-tb-sys = "0.1"
+
+[profile.release]
+lto = true
