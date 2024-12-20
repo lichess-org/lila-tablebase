@@ -63,7 +63,7 @@ pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<i32> {
     match result {
         0 => Some(dtw as i32),
         1 => Some(dtw as i32), // cursed win/loss
-        2 => Some(0), // draw
+        2 => Some(0),          // draw
         error => {
             warn!("antichess tb probe failed with error code {error}");
             None

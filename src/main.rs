@@ -25,6 +25,7 @@ use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
 use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
+use tikv_jemallocator::Jemalloc;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
@@ -36,6 +37,9 @@ use crate::{
     response::{MainlineResponse, TablebaseResponse},
     tablebases::Tablebases,
 };
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 #[derive(Parser, Debug)]
 struct Opt {
