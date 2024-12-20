@@ -28,7 +28,7 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
 antichess-tb-sys = "0.1"
-tikv-jemallocator = "0.6.0"
+tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [profile.release]
 lto = true
