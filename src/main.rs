@@ -218,7 +218,7 @@ async fn serve(opt: Opt) {
         },
         cache: Cache::builder()
             .max_capacity(opt.cache)
-            .time_to_idle(Duration::from_secs(60 * 5))
+            .time_to_idle(Duration::from_secs(60 * 10))
             .build(),
         cache_miss: AtomicU64::new(0),
     }));
