@@ -10,6 +10,7 @@ mod response;
 mod tablebases;
 
 use std::{
+    future::IntoFuture,
     net::SocketAddr,
     path::PathBuf,
     sync::{atomic, atomic::AtomicU64, Arc},
@@ -241,7 +242,10 @@ async fn serve(opt: Opt) {
         None => TcpListener::bind(&opt.bind).await.expect("bind"),
     };
 
-    axum::serve(listener, app).await.expect("serve");
+    tokio::spawn(axum::serve(listener, app).into_future())
+        .await
+        .expect("spawn")
+        .expect("serve");
 }
 
 fn main() {
