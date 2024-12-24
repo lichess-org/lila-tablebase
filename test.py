@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import unittest
+import cbor2
 import os
 import requests
+import unittest
 
 
 TABLEBASE_ENDPOINT = os.environ.get("TABLEBASE_ENDPOINT", "http://localhost:9000")
@@ -92,6 +93,17 @@ class TablebaseTest(unittest.TestCase):
         self.assertIn(r["category"], ["maybe-win", "win"])
         self.assertEqual(r["moves"][0]["dtz"], -98)
         self.assertIn(r["moves"][0]["category"], ["maybe-loss", "loss"])
+
+    def test_cbor_six_piece_mate(self):
+        r = cbor2.loads(requests.get(f"{TABLEBASE_ENDPOINT}/standard", {
+            "fen": "8/4K2k/5Q1P/6P1/8/8/q7/8 w - - 99 148"
+        }, headers={
+            "Accept": "application/cbor"
+        }).content)
+
+        self.assertEqual(r["category"], "win")
+        self.assertEqual(r["moves"][0]["san"], "Qg7#")
+        self.assertEqual(r["moves"][0]["category"], "loss")
 
 
 if __name__ == "__main__":

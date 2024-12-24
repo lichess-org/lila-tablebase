@@ -19,14 +19,16 @@ use std::{
 use axum::{
     extract::{Path, Query, State},
     routing::get,
-    Json, Router,
+    Router,
 };
+use axum_content_negotiation::{Negotiate, NegotiateLayer};
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
 use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
 use tikv_jemallocator::Jemalloc;
 use tokio::net::TcpListener;
+use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
 
@@ -106,7 +108,7 @@ async fn handle_probe(
     State(app): State<&'static AppState>,
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
-) -> Result<Json<TablebaseResponse>, TablebaseError> {
+) -> Result<Negotiate<TablebaseResponse>, TablebaseError> {
     let pieces = query.fen.0.board.occupied().count();
     let span = match variant {
         TablebaseVariant::Standard => info_span!("standard request", fen = %query.fen, pieces),
@@ -124,7 +126,7 @@ async fn handle_probe(
         })
         .instrument(span)
         .await
-        .map(Json)
+        .map(Negotiate)
         .map_err(Arc::unwrap_or_clone)
         .inspect(|_| trace!("success"))
         .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
@@ -134,7 +136,7 @@ async fn handle_mainline(
     State(app): State<&'static AppState>,
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
-) -> Result<Json<MainlineResponse>, TablebaseError> {
+) -> Result<Negotiate<MainlineResponse>, TablebaseError> {
     let span = match variant {
         TablebaseVariant::Standard => info_span!("standard mainline request", fen = %query.fen),
         TablebaseVariant::Atomic => info_span!("atomic mainline request", fen = %query.fen),
@@ -145,7 +147,7 @@ async fn handle_mainline(
         .mainline(variant.position(query.fen)?)
         .instrument(span)
         .await
-        .map(Json)
+        .map(Negotiate)
         .map_err(TablebaseError::from)
         .inspect(|_| trace!("success"))
         .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
@@ -228,7 +230,11 @@ async fn serve(opt: Opt) {
         .route("/{variant}", get(handle_probe))
         .route("/{variant}/mainline", get(handle_mainline))
         .with_state(state)
-        .layer(TraceLayer::new_for_http());
+        .layer(
+            ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http())
+                .layer(NegotiateLayer),
+        );
 
     let listener = match ListenFd::from_env()
         .take_tcp_listener(0)
