@@ -884,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "lila-tablebase"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "antichess-tb-sys",
  "arrayvec",

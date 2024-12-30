@@ -1,13 +1,11 @@
 [package]
 name = "lila-tablebase"
-version = "1.0.0"
 publish = false
 description = "A Syzygy tablebase server"
 homepage = "https://tablebase.lichess.ovh"
 repository = "https://github.com/lichess-org/lila-tablebase"
 readme = "README.md"
 license = "AGPL-3.0+"
-authors = ["Niklas Fiekas <niklas.fiekas@backscattering.de>"]
 categories = ["games"]
 keywords = ["chess", "syzygy", "tablebase"]
 edition = "2021"
