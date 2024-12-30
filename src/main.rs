@@ -163,7 +163,26 @@ async fn handle_monitor(State(app): State<&'static AppState>) -> String {
     format!("tablebase {}", metrics.join(","))
 }
 
-async fn serve(opt: Opt) {
+#[tokio::main]
+async fn main() {
+    // Parse arguments.
+    let opt = Opt::parse();
+    if opt.standard.is_empty()
+        && opt.atomic.is_empty()
+        && opt.antichess.is_empty()
+        && opt.gaviota.is_empty()
+    {
+        Opt::command().print_help().expect("usage");
+        println!();
+        return;
+    }
+
+    // Prepare tracing.
+    tracing_subscriber::fmt()
+        .event_format(tracing_subscriber::fmt::format().compact())
+        .without_time()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
             // Initialize Gaviota tablebase.
@@ -248,33 +267,4 @@ async fn serve(opt: Opt) {
     };
 
     axum::serve(listener, app).await.expect("serve");
-}
-
-fn main() {
-    // Parse arguments.
-    let opt = Opt::parse();
-    if opt.standard.is_empty()
-        && opt.atomic.is_empty()
-        && opt.antichess.is_empty()
-        && opt.gaviota.is_empty()
-    {
-        Opt::command().print_help().expect("usage");
-        println!();
-        return;
-    }
-
-    // Prepare tracing.
-    tracing_subscriber::fmt()
-        .event_format(tracing_subscriber::fmt::format().compact())
-        .without_time()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
-    // Start async runtime.
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .max_blocking_threads(128)
-        .build()
-        .expect("tokio runtime")
-        .block_on(serve(opt));
 }
