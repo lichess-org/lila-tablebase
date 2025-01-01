@@ -27,7 +27,7 @@ use listenfd::ListenFd;
 use moka::future::Cache;
 use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
 use tikv_jemallocator::Jemalloc;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, UnixListener};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
@@ -255,16 +255,17 @@ async fn main() {
                 .layer(NegotiateLayer),
         );
 
-    let listener = match ListenFd::from_env()
-        .take_tcp_listener(0)
-        .expect("tcp listener")
-    {
-        Some(std_listener) => {
-            std_listener.set_nonblocking(true).expect("set nonblocking");
-            TcpListener::from_std(std_listener).expect("listener")
-        }
-        None => TcpListener::bind(&opt.bind).await.expect("bind"),
-    };
-
-    axum::serve(listener, app).await.expect("serve");
+    let mut fds = ListenFd::from_env();
+    if let Ok(Some(uds)) = fds.take_unix_listener(0) {
+        uds.set_nonblocking(true).expect("set nonblocking");
+        let listener = UnixListener::from_std(uds).expect("listener");
+        axum::serve(listener, app).await.expect("serve");
+    } else if let Ok(Some(tcp)) = fds.take_tcp_listener(0) {
+        tcp.set_nonblocking(true).expect("set nonblocking");
+        let listener = TcpListener::from_std(tcp).expect("listener");
+        axum::serve(listener, app).await.expect("serve");
+    } else {
+        let listener = TcpListener::bind(&opt.bind).await.expect("bind");
+        axum::serve(listener, app).await.expect("serve");
+    }
 }
