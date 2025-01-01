@@ -25,7 +25,7 @@ impl HotPrefixFilesystem {
         for entry in fs::read_dir(path)? {
             let entry = entry?;
             let path = entry.path();
-            if !path.extension().map_or(false, |ext| ext == "prefix") {
+            if path.extension().is_none_or(|ext| ext != "prefix") {
                 continue;
             }
             if !entry.metadata()?.is_file() {

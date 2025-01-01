@@ -57,7 +57,7 @@ impl PositionInfo {
             && !self.variant_loss
             && (self.stalemate
                 || self.insufficient_material
-                || self.dtz.map_or(false, |dtz| dtz.is_zero()))
+                || self.dtz.is_some_and(|dtz| dtz.is_zero()))
         {
             Category::Draw
         } else if self.checkmate || self.variant_loss {
