@@ -2,7 +2,7 @@
 Description=Tablebase server socket
 
 [Socket]
-ListenStream=127.0.0.1:9000
+ListenStream=/run/lila-tablebase.socket
 
 [Install]
 WantedBy=sockets.target
