@@ -23,9 +23,9 @@ use axum::{
 };
 use axum_content_negotiation::{Negotiate, NegotiateLayer};
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
+use filesystem::TokioFilesystem;
 use listenfd::ListenFd;
 use moka::future::Cache;
-use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
 use tikv_jemallocator::Jemalloc;
 use tokio::net::{TcpListener, UnixListener};
 use tower::ServiceBuilder;
@@ -72,20 +72,6 @@ struct Opt {
     /// a faster medium.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     hot_prefix: Vec<PathBuf>,
-
-    /// Use memory maps to read table files.
-    ///
-    /// May crash on I/O errors, and cause undefined behavior when open table
-    /// files are modified. May harm performance when using HDDs.
-    #[arg(long)]
-    mmap: bool,
-
-    /// Set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files.
-    ///
-    /// Use only after benchmarking the specific setup. Performance may be
-    /// harmed or improved.
-    #[arg(long)]
-    advise_random: bool,
 
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
@@ -196,11 +182,7 @@ async fn main() {
             }
 
             // Prepare custom Syzygy filesystem implementation.
-            let mut filesystem = HotPrefixFilesystem::new(if opt.mmap {
-                unsafe { Box::new(MmapFilesystem::new().with_advise_random(opt.advise_random)) }
-            } else {
-                Box::new(OsFilesystem::new().with_advise_random(opt.advise_random))
-            });
+            let mut filesystem = HotPrefixFilesystem::new(TokioFilesystem);
             for path in opt.hot_prefix {
                 let n = filesystem
                     .add_prefix_directory(&path)
@@ -213,11 +195,12 @@ async fn main() {
             }
 
             // Initialize Syzygy tablebases.
-            let mut tbs = Tablebases::with_filesystem(Arc::new(filesystem));
+            let mut tbs = Tablebases::with_filesystem(filesystem);
             for path in opt.standard {
                 let n = tbs
                     .standard
                     .add_directory(&path)
+                    .await
                     .expect("open standard directory");
                 info!("added {} standard tables from {}", n, path.display());
             }
@@ -225,6 +208,7 @@ async fn main() {
                 let n = tbs
                     .atomic
                     .add_directory(&path)
+                    .await
                     .expect("open atomic directory");
                 info!("added {} atomic tables from {}", n, path.display());
             }
@@ -232,6 +216,7 @@ async fn main() {
                 let n = tbs
                     .antichess
                     .add_directory(&path)
+                    .await
                     .expect("open antichess directory");
                 info!("added {} antichess tables from {}", n, path.display());
             }

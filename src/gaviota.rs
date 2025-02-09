@@ -5,8 +5,25 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use shakmaty::{variant::VariantPosition, EnPassantMode, Position as _};
+use shakmaty::{Chess, EnPassantMode, Position as _};
 use tracing::warn;
+
+#[derive(Debug, Copy, Clone)]
+pub struct Dtm(pub i32);
+
+impl From<Dtm> for i32 {
+    #[inline]
+    fn from(Dtm(dtm): Dtm) -> i32 {
+        dtm
+    }
+}
+
+impl From<i32> for Dtm {
+    #[inline]
+    fn from(dtm: i32) -> Self {
+        Dtm(dtm)
+    }
+}
 
 pub unsafe fn init(directories: &[PathBuf]) {
     unsafe {
@@ -38,11 +55,7 @@ pub unsafe fn init(directories: &[PathBuf]) {
     }
 }
 
-pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
-    let VariantPosition::Chess(ref pos) = pos else {
-        return None;
-    };
-
+pub unsafe fn probe_dtm(pos: &Chess) -> Option<Dtm> {
     if pos.board().occupied().count() > 5 || pos.castles().any() {
         return None;
     }
@@ -89,12 +102,12 @@ pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
     let plies = plies as i32;
 
     match gaviota_sys::TB_return_values(info) {
-        gaviota_sys::TB_return_values::tb_DRAW if result != 0 => Some(0),
+        gaviota_sys::TB_return_values::tb_DRAW if result != 0 => Some(Dtm(0)),
         gaviota_sys::TB_return_values::tb_WMATE if result != 0 => {
-            Some(pos.turn().fold_wb(plies, -plies))
+            Some(Dtm(pos.turn().fold_wb(plies, -plies)))
         }
         gaviota_sys::TB_return_values::tb_BMATE if result != 0 => {
-            Some(pos.turn().fold_wb(-plies, plies))
+            Some(Dtm(pos.turn().fold_wb(-plies, plies)))
         }
         gaviota_sys::TB_return_values::tb_FORBID => None,
         _ => {

@@ -5,8 +5,25 @@ use std::{
 
 use antichess_tb_sys::{antichess_tb_add_path, antichess_tb_init, antichess_tb_probe_dtw};
 use arrayvec::ArrayVec;
-use shakmaty::{variant::VariantPosition, EnPassantMode, Position as _};
+use shakmaty::{variant::Antichess, EnPassantMode, Position as _};
 use tracing::warn;
+
+#[derive(Debug, Copy, Clone)]
+pub struct Dtw(pub i32);
+
+impl From<Dtw> for i32 {
+    #[inline]
+    fn from(Dtw(dtw): Dtw) -> i32 {
+        dtw
+    }
+}
+
+impl From<i32> for Dtw {
+    #[inline]
+    fn from(dtw: i32) -> Self {
+        Dtw(dtw)
+    }
+}
 
 pub unsafe fn init(directories: &[PathBuf]) {
     unsafe {
@@ -22,11 +39,7 @@ pub unsafe fn init(directories: &[PathBuf]) {
     }
 }
 
-pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<i32> {
-    let VariantPosition::Antichess(ref pos) = pos else {
-        return None;
-    };
-
+pub unsafe fn probe_dtw(pos: &Antichess) -> Option<Dtw> {
     if pos.board().occupied().count() > 4 || pos.castles().any() {
         return None;
     }
@@ -61,9 +74,9 @@ pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<i32> {
     };
 
     match result {
-        0 => Some(dtw as i32),
-        1 => Some(dtw as i32), // cursed win/loss
-        2 => Some(0),          // draw
+        0 => Some(Dtw(dtw as i32)),
+        1 => Some(Dtw(dtw as i32)), // cursed win/loss
+        2 => Some(Dtw(0)),          // draw
         error => {
             warn!("antichess tb probe failed with error code {error}");
             None

@@ -956,15 +956,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
-name = "memmap2"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd3f7eed9d3848f8b98834af67102b720745c4ec028fcd0aa0239277e7de374f"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1406,18 +1397,16 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7202745d1cfcb981073460f63672958cb05f726e3ec42dc6cb3084c6a6afb2e3"
+source = "git+https://github.com/niklasf/shakmaty-syzygy?branch=async#bc0540585c4682d6c3e5403cbd54b3c6a4d57459"
 dependencies = [
  "arrayvec",
+ "async-lock",
+ "async-trait",
  "bitflags",
  "byteorder",
- "libc",
- "memmap2",
- "once_cell",
+ "futures-util",
  "rustc-hash 2.1.0",
  "shakmaty",
- "tracing",
 ]
 
 [[package]]
