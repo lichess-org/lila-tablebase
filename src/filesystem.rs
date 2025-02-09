@@ -161,7 +161,7 @@ pub struct HotPrefixRandomAccessFile<R> {
 impl<R: RandomAccessFile> RandomAccessFile for HotPrefixRandomAccessFile<R> {
     async fn read_at(&self, buf: &mut [u8], offset: u64, hint: ReadHint) -> io::Result<usize> {
         match self.prefix_file {
-            Some(ref prefix_file) if offset < self.prefix_len => {
+            Some(ref prefix_file) if offset + buf.len() as u64 <= self.prefix_len => {
                 prefix_file.read_at(buf, offset, hint).await
             }
             _ => self.file.read_at(buf, offset, hint).await,
