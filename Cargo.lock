@@ -1422,7 +1422,7 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.25.2"
-source = "git+https://github.com/niklasf/shakmaty-syzygy?branch=async#bc0540585c4682d6c3e5403cbd54b3c6a4d57459"
+source = "git+https://github.com/niklasf/shakmaty-syzygy?branch=async#a4dd6b21f6c88ceaba3fd25042ba45cae63facec"
 dependencies = [
  "arrayvec",
  "async-lock",

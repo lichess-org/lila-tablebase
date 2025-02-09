@@ -31,4 +31,7 @@ tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_support
 tower = "0.5"
 
 [profile.release]
-lto = true
+# Disabled due to miscompilation: Corrupted table error due to unexpected eof
+# in data section when probing 8/8/4K3/8/3Q4/8/4k3/B7 b - - 0 1. Last seen on
+# Rust 1.84.1 and 1.86.0-nightly (43ca9d18e 2025-02-08).
+#lto = true
