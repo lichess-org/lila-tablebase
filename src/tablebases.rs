@@ -47,7 +47,6 @@ impl Tablebases {
     }
 
     async fn probe_dtm(&self, pos: &VariantPosition) -> Option<Dtm> {
-        return None;
         let VariantPosition::Chess(ref pos) = *pos else {
             return None;
         };
@@ -59,7 +58,6 @@ impl Tablebases {
     }
 
     async fn probe_dtw(&self, pos: &VariantPosition) -> Option<Dtw> {
-        return None;
         let VariantPosition::Antichess(ref pos) = *pos else {
             return None;
         };
