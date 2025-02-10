@@ -1,18 +1,19 @@
 use std::cmp::Reverse;
 
+use futures_util::{stream::FuturesUnordered, StreamExt as _};
 use shakmaty::{
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
     Move, Outcome, Position as _,
 };
 use shakmaty_syzygy::{aio::Tablebase, Dtz, MaybeRounded, SyzygyError};
-use tokio::{join, task, task::JoinSet};
+use tokio::{join, task};
 use tracing::info;
 
 use crate::{
     antichess_tb,
     antichess_tb::Dtw,
-    filesystem::{HotPrefixFilesystem, TokioFilesystem},
+    filesystem::{HotPrefixFilesystem, TokioUringFilesystem},
     gaviota,
     gaviota::Dtm,
     response::{
@@ -22,13 +23,13 @@ use crate::{
 };
 
 pub struct Tablebases {
-    pub standard: Tablebase<Chess, HotPrefixFilesystem<TokioFilesystem>>,
-    pub atomic: Tablebase<Atomic, HotPrefixFilesystem<TokioFilesystem>>,
-    pub antichess: Tablebase<Antichess, HotPrefixFilesystem<TokioFilesystem>>,
+    pub standard: Tablebase<Chess, HotPrefixFilesystem<TokioUringFilesystem>>,
+    pub atomic: Tablebase<Atomic, HotPrefixFilesystem<TokioUringFilesystem>>,
+    pub antichess: Tablebase<Antichess, HotPrefixFilesystem<TokioUringFilesystem>>,
 }
 
 impl Tablebases {
-    pub fn with_filesystem(filesystem: HotPrefixFilesystem<TokioFilesystem>) -> Tablebases {
+    pub fn with_filesystem(filesystem: HotPrefixFilesystem<TokioUringFilesystem>) -> Tablebases {
         Tablebases {
             standard: Tablebase::with_filesystem(filesystem.clone()),
             atomic: Tablebase::with_filesystem(filesystem.clone()),
@@ -46,6 +47,7 @@ impl Tablebases {
     }
 
     async fn probe_dtm(&self, pos: &VariantPosition) -> Option<Dtm> {
+        return None;
         let VariantPosition::Chess(ref pos) = *pos else {
             return None;
         };
@@ -57,6 +59,7 @@ impl Tablebases {
     }
 
     async fn probe_dtw(&self, pos: &VariantPosition) -> Option<Dtw> {
+        return None;
         let VariantPosition::Antichess(ref pos) = *pos else {
             return None;
         };
@@ -124,7 +127,7 @@ impl Tablebases {
 
         let halfmoves = pos.halfmoves();
 
-        let move_info: JoinSet<_> = pos
+        let move_info: FuturesUnordered<_> = pos
             .legal_moves()
             .into_iter()
             .map(|m| {
@@ -146,7 +149,7 @@ impl Tablebases {
             })
             .collect();
 
-        let (pos_info, move_info) = join!(self.position_info(&pos), move_info.join_all());
+        let (pos_info, move_info) = join!(self.position_info(&pos), move_info.collect::<Vec<_>>());
         let pos_info = pos_info?;
         let mut move_info = move_info.into_iter().collect::<Result<Vec<_>, _>>()?;
 

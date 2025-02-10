@@ -2,85 +2,59 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     fs, io,
-    os::unix::fs::FileExt,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use shakmaty_syzygy::aio::{Filesystem, RandomAccessFile, ReadHint};
-use tokio::task;
 
 #[derive(Clone)]
-pub struct TokioFilesystem;
+pub struct TokioUringFilesystem;
 
-impl Filesystem for TokioFilesystem {
-    type RandomAccessFile = TokioRandomAccessFile;
+impl Filesystem for TokioUringFilesystem {
+    type RandomAccessFile = TokioUringRandomAccessFile;
 
     async fn read_dir(&self, path: &Path) -> io::Result<Vec<PathBuf>> {
-        let mut paths = Vec::new();
-        let mut read_dir = tokio::fs::read_dir(path).await?;
-        while let Some(entry) = read_dir.next_entry().await? {
-            paths.push(entry.path());
-        }
-        Ok(paths)
+        fs::read_dir(path)?
+            .map(|maybe_entry| maybe_entry.map(|entry| entry.path().to_owned()))
+            .collect()
     }
 
     async fn regular_file_size(&self, path: &Path) -> io::Result<u64> {
-        let meta = tokio::fs::metadata(path).await?;
-        if !meta.is_file() {
+        let stat = tokio_uring::fs::statx(path).await?;
+        if libc::mode_t::from(stat.stx_mode) & libc::S_IFMT != libc::S_IFREG {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "not a regular file",
             ));
         }
-        Ok(meta.len())
+        Ok(stat.stx_size)
     }
 
-    async fn open(&self, path: &Path) -> io::Result<TokioRandomAccessFile> {
-        let path = path.to_owned();
-        task::spawn_blocking(|| {
-            Ok(TokioRandomAccessFile {
-                file: Arc::new(fs::File::open(path)?),
+    async fn open(&self, path: &Path) -> io::Result<TokioUringRandomAccessFile> {
+            Ok(TokioUringRandomAccessFile {
+                file: tokio_uring::fs::File::open(path).await?,
             })
-        })
-        .await
-        .expect("blocking open")
     }
 }
 
-pub struct TokioRandomAccessFile {
-    file: Arc<fs::File>,
+pub struct TokioUringRandomAccessFile {
+    file: tokio_uring::fs::File,
 }
 
-impl RandomAccessFile for TokioRandomAccessFile {
+impl RandomAccessFile for TokioUringRandomAccessFile {
     async fn read_at(&self, buf: &mut [u8], offset: u64, _hint: ReadHint) -> io::Result<usize> {
-        let max_len = buf.len();
-        let file = Arc::clone(&self.file);
-        let owned_buf = task::spawn_blocking(move || {
-            let mut owned_buf = vec![0; max_len];
-            let n = file.read_at(&mut owned_buf[..], offset)?;
-            owned_buf.truncate(n);
-            Ok::<_, io::Error>(owned_buf)
-        })
-        .await
-        .expect("blocking read_at")?;
-
-        buf[..owned_buf.len()].copy_from_slice(&owned_buf);
-        Ok(owned_buf.len())
+        let owned_buf = vec![0; buf.len()];
+        let (res, owned_buf) = self.file.read_at(owned_buf, offset).await;
+        let n = res?;
+        buf[..n].copy_from_slice(&owned_buf[..n]);
+        Ok(n)
     }
 
     async fn read_exact_at(&self, buf: &mut [u8], offset: u64, _hint: ReadHint) -> io::Result<()> {
-        let len = buf.len();
-        let file = Arc::clone(&self.file);
-        let owned_buf = task::spawn_blocking(move || {
-            let mut owned_buf = vec![0; len];
-            file.read_exact_at(&mut owned_buf[..], offset)?;
-            Ok::<_, io::Error>(owned_buf)
-        })
-        .await
-        .expect("blocking read_exact_at")?;
-
-        buf.copy_from_slice(&owned_buf);
+        let owned_buf = Vec::with_capacity(buf.len());
+        let (res, owned_buf) = self.file.read_exact_at(owned_buf, offset).await;
+        res?;
+        buf[..].copy_from_slice(&owned_buf);
         Ok(())
     }
 }

@@ -13,6 +13,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{atomic, atomic::AtomicU64, Arc},
+    thread,
     time::Duration,
 };
 
@@ -23,11 +24,14 @@ use axum::{
 };
 use axum_content_negotiation::{Negotiate, NegotiateLayer};
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
-use filesystem::TokioFilesystem;
+use filesystem::TokioUringFilesystem;
 use listenfd::ListenFd;
 use moka::future::Cache;
 use tikv_jemallocator::Jemalloc;
-use tokio::net::{TcpListener, UnixListener};
+use tokio::{
+    net::{TcpListener, UnixListener},
+    sync::{mpsc, oneshot},
+};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
@@ -43,7 +47,7 @@ use crate::{
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 struct Opt {
     /// Directory with Syzygy tablebase files for standard chess.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
@@ -83,94 +87,30 @@ struct Opt {
 }
 
 struct AppState {
-    tbs: Tablebases,
+    tx: mpsc::Sender<TablebaseRequest>,
     cache: TablebaseCache,
     cache_miss: AtomicU64,
 }
 
 type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
 
-async fn handle_probe(
-    State(app): State<&'static AppState>,
-    Path(variant): Path<TablebaseVariant>,
-    Query(query): Query<TablebaseQuery>,
-) -> Result<Negotiate<TablebaseResponse>, TablebaseError> {
-    let pieces = query.fen.0.board.occupied().count();
-    let span = match variant {
-        TablebaseVariant::Standard => info_span!("standard request", fen = %query.fen, pieces),
-        TablebaseVariant::Atomic => info_span!("atomic request", fen = %query.fen, pieces),
-        TablebaseVariant::Antichess => info_span!("antichess request", fen = %query.fen, pieces),
-    };
-
-    app.cache
-        .try_get_with((variant, query.clone()), async move {
-            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
-            app.tbs
-                .probe(variant.position(query.fen)?)
-                .await
-                .map_err(TablebaseError::from)
-                .inspect(|_| trace!("success"))
-                .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
-        })
-        .instrument(span)
-        .await
-        .map(Negotiate)
-        .map_err(Arc::unwrap_or_clone)
+enum TablebaseRequest {
+    Probe {
+        variant: TablebaseVariant,
+        query: TablebaseQuery,
+        tx: oneshot::Sender<Result<TablebaseResponse, TablebaseError>>,
+    },
+    Mainline {
+        variant: TablebaseVariant,
+        query: TablebaseQuery,
+        tx: oneshot::Sender<Result<MainlineResponse, TablebaseError>>,
+    },
 }
 
-async fn handle_mainline(
-    State(app): State<&'static AppState>,
-    Path(variant): Path<TablebaseVariant>,
-    Query(query): Query<TablebaseQuery>,
-) -> Result<Negotiate<MainlineResponse>, TablebaseError> {
-    let span = match variant {
-        TablebaseVariant::Standard => info_span!("standard mainline request", fen = %query.fen),
-        TablebaseVariant::Atomic => info_span!("atomic mainline request", fen = %query.fen),
-        TablebaseVariant::Antichess => info_span!("antichess mainline request", fen = %query.fen),
-    };
-
-    app.tbs
-        .mainline(variant.position(query.fen)?)
-        .instrument(span)
-        .await
-        .map(Negotiate)
-        .map_err(TablebaseError::from)
-        .inspect(|_| trace!("success"))
-        .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
-}
-
-async fn handle_monitor(State(app): State<&'static AppState>) -> String {
-    let cache = app.cache.entry_count();
-    let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
-    let metrics = &[
-        format!("cache={cache}u"),
-        format!("cache_miss={cache_miss}u"),
-    ];
-    format!("tablebase {}", metrics.join(","))
-}
-
-#[tokio::main]
-async fn main() {
-    // Parse arguments.
-    let opt = Opt::parse();
-    if opt.standard.is_empty()
-        && opt.atomic.is_empty()
-        && opt.antichess.is_empty()
-        && opt.gaviota.is_empty()
-    {
-        Opt::command().print_help().expect("usage");
-        println!();
-        return;
-    }
-
-    // Prepare tracing.
-    tracing_subscriber::fmt()
-        .event_format(tracing_subscriber::fmt::format().compact())
-        .without_time()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-    let state: &'static AppState = Box::leak(Box::new(AppState {
-        tbs: {
+fn spawn_backend(opt: Opt) -> mpsc::Sender<TablebaseRequest> {
+    let (tx, mut rx) = mpsc::channel(512);
+    thread::spawn(move || {
+        tokio_uring::start(async {
             // Initialize Gaviota tablebase.
             unsafe {
                 gaviota::init(&opt.gaviota);
@@ -182,7 +122,7 @@ async fn main() {
             }
 
             // Prepare custom Syzygy filesystem implementation.
-            let mut filesystem = HotPrefixFilesystem::new(TokioFilesystem);
+            let mut filesystem = HotPrefixFilesystem::new(TokioUringFilesystem);
             for path in opt.hot_prefix {
                 let n = filesystem
                     .add_prefix_directory(&path)
@@ -220,8 +160,152 @@ async fn main() {
                     .expect("open antichess directory");
                 info!("added {} antichess tables from {}", n, path.display());
             }
-            tbs
-        },
+
+            // Serve requests
+            let tbs: &'static _ = Box::leak(Box::new(tbs));
+            while let Some(req) = rx.recv().await {
+                match req {
+                    TablebaseRequest::Probe { variant, query, tx } => {
+                        let pieces = query.fen.0.board.occupied().count();
+                        let span = match variant {
+                            TablebaseVariant::Standard => {
+                                info_span!("standard request", fen = %query.fen, pieces)
+                            }
+                            TablebaseVariant::Atomic => {
+                                info_span!("atomic request", fen = %query.fen, pieces)
+                            }
+                            TablebaseVariant::Antichess => {
+                                info_span!("antichess request", fen = %query.fen, pieces)
+                            }
+                        };
+                        tokio_uring::spawn(
+                            async move {
+                                let _ = tx.send(match variant.position(query.fen) {
+                                    Ok(pos) => tbs.probe(pos)
+                                    .await
+                                    .map_err(TablebaseError::from)
+                                    .inspect(|_| trace!("success"))
+                                    .inspect_err(
+                                        |error| dyn_event!(error.tracing_level(), %error, "fail")
+                                    ),
+                                    Err(err) => Err(err.into())
+                                });
+                            }
+                            .instrument(span),
+                        );
+                    }
+                    TablebaseRequest::Mainline { variant, query, tx } => {
+                        let span = match variant {
+                            TablebaseVariant::Standard => {
+                                info_span!("standard mainline request", fen = %query.fen)
+                            }
+                            TablebaseVariant::Atomic => {
+                                info_span!("atomic mainline request", fen = %query.fen)
+                            }
+                            TablebaseVariant::Antichess => {
+                                info_span!("antichess mainline request", fen = %query.fen)
+                            }
+                        };
+                        tokio_uring::spawn(
+                            async move {
+                                let _ = tx.send(match variant.position(query.fen) {
+                                    Ok(pos) => tbs.mainline(pos)
+                                    .await
+                                    .map_err(TablebaseError::from)
+                                    .inspect(|_| trace!("success"))
+                                    .inspect_err(
+                                        |error| dyn_event!(error.tracing_level(), %error, "fail"),
+                                    ),
+                                    Err(err) => Err(err.into())});
+                            }
+                            .instrument(span),
+                        );
+                    }
+                }
+            }
+        });
+    });
+    tx
+}
+
+#[axum::debug_handler]
+async fn handle_probe(
+    State(app): State<&'static AppState>,
+    Path(variant): Path<TablebaseVariant>,
+    Query(query): Query<TablebaseQuery>,
+) -> Result<Negotiate<TablebaseResponse>, TablebaseError> {
+    let pieces = query.fen.0.board.occupied().count();
+    let span = match variant {
+        TablebaseVariant::Standard => info_span!("standard request", fen = %query.fen, pieces),
+        TablebaseVariant::Atomic => info_span!("atomic request", fen = %query.fen, pieces),
+        TablebaseVariant::Antichess => info_span!("antichess request", fen = %query.fen, pieces),
+    };
+
+    app.cache
+        .try_get_with((variant, query.clone()), async move {
+            app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
+
+            let (tx, rx) = oneshot::channel();
+            app.tx
+                .send(TablebaseRequest::Probe { variant, query, tx })
+                .await
+                .expect("backend alive");
+            rx.await.expect("backend answers request")
+        })
+        .instrument(span)
+        .await
+        .map(Negotiate)
+        .map_err(Arc::unwrap_or_clone)
+}
+
+async fn handle_mainline(
+    State(app): State<&'static AppState>,
+    Path(variant): Path<TablebaseVariant>,
+    Query(query): Query<TablebaseQuery>,
+) -> Result<Negotiate<MainlineResponse>, TablebaseError> {
+    let (tx, rx) = oneshot::channel();
+    app.tx
+        .send(TablebaseRequest::Mainline { variant, query, tx })
+        .await
+        .expect("backend alive");
+    rx.await.expect("backend answers request").map(Negotiate)
+}
+
+async fn handle_monitor(State(app): State<&'static AppState>) -> String {
+    let cache = app.cache.entry_count();
+    let cache_miss = app.cache_miss.load(atomic::Ordering::Relaxed);
+    let metrics = &[
+        format!("cache={cache}u"),
+        format!("cache_miss={cache_miss}u"),
+    ];
+    format!("tablebase {}", metrics.join(","))
+}
+
+#[tokio::main]
+async fn main() {
+    // Parse arguments.
+    let opt = Opt::parse();
+    if opt.standard.is_empty()
+        && opt.atomic.is_empty()
+        && opt.antichess.is_empty()
+        && opt.gaviota.is_empty()
+    {
+        Opt::command().print_help().expect("usage");
+        println!();
+        return;
+    }
+
+    // Prepare tracing.
+    tracing_subscriber::fmt()
+        .event_format(tracing_subscriber::fmt::format().compact())
+        .without_time()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    let tx = spawn_backend(opt.clone());
+
+    let state: &'static AppState = Box::leak(Box::new(AppState {
+        tx,
         cache: Cache::builder()
             .max_capacity(opt.cache)
             .time_to_idle(Duration::from_secs(60 * 10))
