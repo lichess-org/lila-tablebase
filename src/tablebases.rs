@@ -7,7 +7,7 @@ use shakmaty::{
     Move, Outcome, Position as _,
 };
 use shakmaty_syzygy::{aio::Tablebase, Dtz, MaybeRounded, SyzygyError};
-use tokio::{join, task};
+use tokio::join;
 use tracing::info;
 
 use crate::{
@@ -51,10 +51,8 @@ impl Tablebases {
             return None;
         };
 
-        let pos = pos.clone();
-        task::spawn_blocking(move || unsafe { gaviota::probe_dtm(&pos) })
-            .await
-            .expect("blocking probe_dtm")
+        // Assuming load from hot memory map does not block
+        unsafe { gaviota::probe_dtm(&pos) }
     }
 
     async fn probe_dtw(&self, pos: &VariantPosition) -> Option<Dtw> {
@@ -62,10 +60,8 @@ impl Tablebases {
             return None;
         };
 
-        let pos = pos.clone();
-        task::spawn_blocking(move || unsafe { antichess_tb::probe_dtw(&pos) })
-            .await
-            .expect("blocking probe_dtw")
+        // Assuming load from hot memory map does not block
+        unsafe { antichess_tb::probe_dtw(&pos) }
     }
 
     async fn best_move(
