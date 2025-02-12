@@ -1,14 +1,48 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs, io,
+    fs, io, iter,
     path::{Path, PathBuf},
 };
 
 use shakmaty_syzygy::aio::{Filesystem, RandomAccessFile, ReadHint};
+use tokio_uring::buf::fixed::FixedBufPool;
 
 #[derive(Clone)]
-pub struct TokioUringFilesystem;
+pub struct TokioUringFilesystem {
+    buf_pool: FixedBufPool<Vec<u8>>,
+}
+
+impl TokioUringFilesystem {
+    pub fn new() -> TokioUringFilesystem {
+        let buf_pool = FixedBufPool::new(
+            iter::empty()
+                .chain(iter::repeat_with(|| Vec::with_capacity(1)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity(2)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity(3)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity(4)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity(5)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity(6)).take(60)) // sparse index
+                .chain(iter::repeat_with(|| Vec::with_capacity(7)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity(10)).take(10))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 0) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 1) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 2) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 3) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 4) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 5) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 6) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 7) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 8) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 9) + 4)).take(50))
+                .chain(iter::repeat_with(|| Vec::with_capacity((1 << 10) + 4)).take(50)),
+        );
+        buf_pool
+            .register()
+            .expect("register buf pool in current ring");
+        TokioUringFilesystem { buf_pool }
+    }
+}
 
 impl Filesystem for TokioUringFilesystem {
     type RandomAccessFile = TokioUringRandomAccessFile;
@@ -33,26 +67,24 @@ impl Filesystem for TokioUringFilesystem {
     async fn open(&self, path: &Path) -> io::Result<TokioUringRandomAccessFile> {
         Ok(TokioUringRandomAccessFile {
             file: tokio_uring::fs::File::open(path).await?,
+            buf_pool: self.buf_pool.clone(),
         })
     }
 }
 
 pub struct TokioUringRandomAccessFile {
     file: tokio_uring::fs::File,
+    buf_pool: FixedBufPool<Vec<u8>>,
 }
 
 impl RandomAccessFile for TokioUringRandomAccessFile {
-    async fn read_at(&self, buf: &mut [u8], offset: u64, _hint: ReadHint) -> io::Result<usize> {
-        let owned_buf = vec![0; buf.len()];
-        let (res, owned_buf) = self.file.read_at(owned_buf, offset).await;
-        let n = res?;
-        buf[..n].copy_from_slice(&owned_buf[..n]);
-        Ok(n)
+    async fn read_at(&self, _buf: &mut [u8], _offset: u64, _hint: ReadHint) -> io::Result<usize> {
+        unreachable!("always using read_exact_at")
     }
 
     async fn read_exact_at(&self, buf: &mut [u8], offset: u64, _hint: ReadHint) -> io::Result<()> {
-        let owned_buf = Vec::with_capacity(buf.len());
-        let (res, owned_buf) = self.file.read_exact_at(owned_buf, offset).await;
+        let owned_buf = self.buf_pool.next(buf.len()).await;
+        let (res, owned_buf) = self.file.read_fixed_at(owned_buf, offset).await;
         res?;
         buf[..].copy_from_slice(&owned_buf);
         Ok(())
