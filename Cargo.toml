@@ -12,7 +12,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.8"
-axum-content-negotiation = { git = "https://github.com/niklasf/axum-content-negotiation", branch = "axum-0.8.0-rc.1" }
+axum-content-negotiation = "0.1.2"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
