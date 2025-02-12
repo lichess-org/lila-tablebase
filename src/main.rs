@@ -131,7 +131,7 @@ fn spawn_backend(opt: Opt) -> mpsc::Sender<TablebaseRequest> {
             .entries(1024)
             .start(async {
                 // Prepare custom Syzygy filesystem implementation.
-                let mut filesystem = HotPrefixFilesystem::new(TokioUringFilesystem::new());
+                let mut filesystem = HotPrefixFilesystem::new(TokioUringFilesystem);
                 for path in opt.hot_prefix {
                     let n = filesystem
                         .add_prefix_directory(&path)
