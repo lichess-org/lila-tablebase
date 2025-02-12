@@ -31,9 +31,9 @@ impl Filesystem for TokioUringFilesystem {
     }
 
     async fn open(&self, path: &Path) -> io::Result<TokioUringRandomAccessFile> {
-            Ok(TokioUringRandomAccessFile {
-                file: tokio_uring::fs::File::open(path).await?,
-            })
+        Ok(TokioUringRandomAccessFile {
+            file: tokio_uring::fs::File::open(path).await?,
+        })
     }
 }
 
