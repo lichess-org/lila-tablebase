@@ -323,7 +323,7 @@ async fn main() {
 
     let state: &'static AppState = Box::leak(Box::new(AppState {
         round_robin: RoundRobin {
-            txs: (0..1).map(|_| spawn_backend(opt.clone())).collect(),
+            txs: (0..4).map(|_| spawn_backend(opt.clone())).collect(),
             current: AtomicUsize::new(0),
         },
         cache: Cache::builder()
