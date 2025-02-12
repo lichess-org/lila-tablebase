@@ -1,5 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
+use arrayvec::ArrayVec;
 use shakmaty::{
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
@@ -125,7 +126,7 @@ impl Tablebases {
                     })
                 })
             })
-            .collect::<Vec<_>>();
+            .collect::<ArrayVec<_, 256>>();
 
         let pos_info_handle = task::spawn_blocking(move || self.position_info_blocking(&pos));
 
@@ -133,7 +134,7 @@ impl Tablebases {
         for handle in move_info_handles {
             move_info.push(handle.await.expect("move info")?);
         }
-        move_info.sort_by_key(|m: &MoveInfo| {
+        move_info.sort_unstable_by_key(|m: &MoveInfo| {
             (
                 PessimisticUnknown(m.category),
                 (
