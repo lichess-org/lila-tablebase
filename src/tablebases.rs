@@ -33,7 +33,7 @@ impl Tablebases {
             standard: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
             atomic: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
             antichess: SyzygyTablebase::with_filesystem(fs),
-            semaphore: Semaphore::new(128),
+            semaphore: Semaphore::new(256),
         }
     }
 
