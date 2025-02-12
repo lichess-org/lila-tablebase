@@ -12,7 +12,12 @@ mod tablebases;
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    sync::{atomic, atomic::AtomicU64, Arc},
+    sync::{
+        atomic,
+        atomic::{AtomicU64, AtomicUsize},
+        Arc,
+    },
+    thread,
     time::Duration,
 };
 
@@ -23,11 +28,14 @@ use axum::{
 };
 use axum_content_negotiation::{Negotiate, NegotiateLayer};
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
+use filesystem::TokioUringFilesystem;
 use listenfd::ListenFd;
 use moka::future::Cache;
-use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
 use tikv_jemallocator::Jemalloc;
-use tokio::net::{TcpListener, UnixListener};
+use tokio::{
+    net::{TcpListener, UnixListener},
+    sync::{mpsc, oneshot},
+};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, trace, Instrument as _};
@@ -43,7 +51,7 @@ use crate::{
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 struct Opt {
     /// Directory with Syzygy tablebase files for standard chess.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
@@ -73,20 +81,6 @@ struct Opt {
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     hot_prefix: Vec<PathBuf>,
 
-    /// Use memory maps to read table files.
-    ///
-    /// May crash on I/O errors, and cause undefined behavior when open table
-    /// files are modified. May harm performance when using HDDs.
-    #[arg(long)]
-    mmap: bool,
-
-    /// Set POSIX_FADVISE_RANDOM or MADV_RANDOM on table files.
-    ///
-    /// Use only after benchmarking the specific setup. Performance may be
-    /// harmed or improved.
-    #[arg(long)]
-    advise_random: bool,
-
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
     cache: u64,
@@ -97,13 +91,153 @@ struct Opt {
 }
 
 struct AppState {
-    tbs: Tablebases,
+    round_robin: RoundRobin<TablebaseRequest>,
     cache: TablebaseCache,
     cache_miss: AtomicU64,
 }
 
+struct RoundRobin<T> {
+    txs: Vec<mpsc::Sender<T>>,
+    current: AtomicUsize,
+}
+
+impl<T> RoundRobin<T> {
+    async fn send(&self, req: T) -> Result<(), mpsc::error::SendError<T>> {
+        let i = self.current.fetch_add(1, atomic::Ordering::Relaxed) % self.txs.len();
+        self.txs[i].send(req).await
+    }
+}
+
 type TablebaseCache = Cache<(TablebaseVariant, TablebaseQuery), TablebaseResponse>;
 
+enum TablebaseRequest {
+    Probe {
+        variant: TablebaseVariant,
+        query: TablebaseQuery,
+        tx: oneshot::Sender<Result<TablebaseResponse, TablebaseError>>,
+    },
+    Mainline {
+        variant: TablebaseVariant,
+        query: TablebaseQuery,
+        tx: oneshot::Sender<Result<MainlineResponse, TablebaseError>>,
+    },
+}
+
+fn spawn_backend(opt: Opt) -> mpsc::Sender<TablebaseRequest> {
+    let (tx, mut rx) = mpsc::channel(256);
+    thread::spawn(move || {
+        tokio_uring::builder()
+            .uring_builder(tokio_uring::uring_builder().dontfork().setup_sqpoll(500))
+            .entries(1024)
+            .start(async {
+                // Prepare custom Syzygy filesystem implementation.
+                let mut filesystem = HotPrefixFilesystem::new(TokioUringFilesystem);
+                for path in opt.hot_prefix {
+                    let n = filesystem
+                        .add_prefix_directory(&path)
+                        .expect("add hot prefix directory");
+                    info!(
+                        "added {} hot prefix candidate files from {}",
+                        n,
+                        path.display()
+                    );
+                }
+
+                // Initialize Syzygy tablebases.
+                let mut tbs = Tablebases::with_filesystem(filesystem);
+                for path in opt.standard {
+                    let n = tbs
+                        .standard
+                        .add_directory(&path)
+                        .await
+                        .expect("open standard directory");
+                    info!("added {} standard tables from {}", n, path.display());
+                }
+                for path in opt.atomic {
+                    let n = tbs
+                        .atomic
+                        .add_directory(&path)
+                        .await
+                        .expect("open atomic directory");
+                    info!("added {} atomic tables from {}", n, path.display());
+                }
+                for path in opt.antichess {
+                    let n = tbs
+                        .antichess
+                        .add_directory(&path)
+                        .await
+                        .expect("open antichess directory");
+                    info!("added {} antichess tables from {}", n, path.display());
+                }
+
+                // Serve requests
+                let tbs: &'static _ = Box::leak(Box::new(tbs));
+                while let Some(req) = rx.recv().await {
+                    match req {
+                        TablebaseRequest::Probe { variant, query, tx } => {
+                            let pieces = query.fen.0.board.occupied().count();
+                            let span = match variant {
+                                TablebaseVariant::Standard => {
+                                    info_span!("standard request", fen = %query.fen, pieces)
+                                }
+                                TablebaseVariant::Atomic => {
+                                    info_span!("atomic request", fen = %query.fen, pieces)
+                                }
+                                TablebaseVariant::Antichess => {
+                                    info_span!("antichess request", fen = %query.fen, pieces)
+                                }
+                            };
+                            tokio_uring::spawn(
+                                async move {
+                                    let _ = tx.send(match variant.position(query.fen) {
+                                    Ok(pos) => tbs.probe(pos)
+                                    .await
+                                    .map_err(TablebaseError::from)
+                                    .inspect(|_| trace!("success"))
+                                    .inspect_err(
+                                        |error| dyn_event!(error.tracing_level(), %error, "fail")
+                                    ),
+                                    Err(err) => Err(err.into())
+                                });
+                                }
+                                .instrument(span),
+                            );
+                        }
+                        TablebaseRequest::Mainline { variant, query, tx } => {
+                            let span = match variant {
+                                TablebaseVariant::Standard => {
+                                    info_span!("standard mainline request", fen = %query.fen)
+                                }
+                                TablebaseVariant::Atomic => {
+                                    info_span!("atomic mainline request", fen = %query.fen)
+                                }
+                                TablebaseVariant::Antichess => {
+                                    info_span!("antichess mainline request", fen = %query.fen)
+                                }
+                            };
+                            tokio_uring::spawn(
+                                async move {
+                                    let _ = tx.send(match variant.position(query.fen) {
+                                    Ok(pos) => tbs.mainline(pos)
+                                    .await
+                                    .map_err(TablebaseError::from)
+                                    .inspect(|_| trace!("success"))
+                                    .inspect_err(
+                                        |error| dyn_event!(error.tracing_level(), %error, "fail"),
+                                    ),
+                                    Err(err) => Err(err.into())});
+                                }
+                                .instrument(span),
+                            );
+                        }
+                    }
+                }
+            });
+    });
+    tx
+}
+
+#[axum::debug_handler]
 async fn handle_probe(
     State(app): State<&'static AppState>,
     Path(variant): Path<TablebaseVariant>,
@@ -119,17 +253,18 @@ async fn handle_probe(
     app.cache
         .try_get_with((variant, query.clone()), async move {
             app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
-            app.tbs
-                .probe(variant.position(query.fen)?)
+
+            let (tx, rx) = oneshot::channel();
+            app.round_robin
+                .send(TablebaseRequest::Probe { variant, query, tx })
                 .await
-                .map_err(TablebaseError::from)
+                .expect("backend alive");
+            rx.await.expect("backend answers request")
         })
         .instrument(span)
         .await
         .map(Negotiate)
         .map_err(Arc::unwrap_or_clone)
-        .inspect(|_| trace!("success"))
-        .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
 }
 
 async fn handle_mainline(
@@ -137,20 +272,12 @@ async fn handle_mainline(
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Negotiate<MainlineResponse>, TablebaseError> {
-    let span = match variant {
-        TablebaseVariant::Standard => info_span!("standard mainline request", fen = %query.fen),
-        TablebaseVariant::Atomic => info_span!("atomic mainline request", fen = %query.fen),
-        TablebaseVariant::Antichess => info_span!("antichess mainline request", fen = %query.fen),
-    };
-
-    app.tbs
-        .mainline(variant.position(query.fen)?)
-        .instrument(span)
+    let (tx, rx) = oneshot::channel();
+    app.round_robin
+        .send(TablebaseRequest::Mainline { variant, query, tx })
         .await
-        .map(Negotiate)
-        .map_err(TablebaseError::from)
-        .inspect(|_| trace!("success"))
-        .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
+        .expect("backend alive");
+    rx.await.expect("backend answers request").map(Negotiate)
 }
 
 async fn handle_monitor(State(app): State<&'static AppState>) -> String {
@@ -183,59 +310,21 @@ async fn main() {
         .without_time()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+
+    // Initialize Gaviota tablebase.
+    unsafe {
+        gaviota::init(&opt.gaviota);
+    }
+
+    // Initialize Antichess tablebase.
+    unsafe {
+        antichess_tb::init(&opt.antichess_tb);
+    }
+
     let state: &'static AppState = Box::leak(Box::new(AppState {
-        tbs: {
-            // Initialize Gaviota tablebase.
-            unsafe {
-                gaviota::init(&opt.gaviota);
-            }
-
-            // Initialize Antichess tablebase.
-            unsafe {
-                antichess_tb::init(&opt.antichess_tb);
-            }
-
-            // Prepare custom Syzygy filesystem implementation.
-            let mut filesystem = HotPrefixFilesystem::new(if opt.mmap {
-                unsafe { Box::new(MmapFilesystem::new().with_advise_random(opt.advise_random)) }
-            } else {
-                Box::new(OsFilesystem::new().with_advise_random(opt.advise_random))
-            });
-            for path in opt.hot_prefix {
-                let n = filesystem
-                    .add_prefix_directory(&path)
-                    .expect("add hot prefix directory");
-                info!(
-                    "added {} hot prefix candidate files from {}",
-                    n,
-                    path.display()
-                );
-            }
-
-            // Initialize Syzygy tablebases.
-            let mut tbs = Tablebases::with_filesystem(Arc::new(filesystem));
-            for path in opt.standard {
-                let n = tbs
-                    .standard
-                    .add_directory(&path)
-                    .expect("open standard directory");
-                info!("added {} standard tables from {}", n, path.display());
-            }
-            for path in opt.atomic {
-                let n = tbs
-                    .atomic
-                    .add_directory(&path)
-                    .expect("open atomic directory");
-                info!("added {} atomic tables from {}", n, path.display());
-            }
-            for path in opt.antichess {
-                let n = tbs
-                    .antichess
-                    .add_directory(&path)
-                    .expect("open antichess directory");
-                info!("added {} antichess tables from {}", n, path.display());
-            }
-            tbs
+        round_robin: RoundRobin {
+            txs: (0..4).map(|_| spawn_backend(opt.clone())).collect(),
+            current: AtomicUsize::new(0),
         },
         cache: Cache::builder()
             .max_capacity(opt.cache)

@@ -11,13 +11,13 @@ keywords = ["chess", "syzygy", "tablebase"]
 edition = "2021"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["macros"] }
 axum-content-negotiation = { git = "https://github.com/niklasf/axum-content-negotiation", branch = "axum-0.8.0-rc.1" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 shakmaty = "0.27"
-shakmaty-syzygy = { version = "0.25", features = ["variant", "mmap"] }
+shakmaty-syzygy = { git = "https://github.com/niklasf/shakmaty-syzygy", branch = "async", features = ["variant"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
@@ -29,6 +29,12 @@ tracing = "0.1"
 antichess-tb-sys = "0.1"
 tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"] }
 tower = "0.5"
+tokio-uring = "0.5.0"
+libc = "0.2.169"
+futures-util = "0.3.31"
 
 [profile.release]
-lto = true
+# Disabled due to miscompilation: Corrupted table error due to unexpected eof
+# in data section when probing 8/8/4K3/8/3Q4/8/4k3/B7 b - - 0 1. Last seen on
+# Rust 1.84.1 and 1.86.0-nightly (43ca9d18e 2025-02-08).
+#lto = true

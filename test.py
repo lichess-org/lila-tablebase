@@ -9,10 +9,12 @@ import unittest
 TABLEBASE_ENDPOINT = os.environ.get("TABLEBASE_ENDPOINT", "http://localhost:9000")
 
 
-def standard(fen):
-    return requests.get(f"{TABLEBASE_ENDPOINT}/standard", {
+def standard(fen, session=requests.Session()):
+    r = session.get(f"{TABLEBASE_ENDPOINT}/standard", params={
         "fen": fen,
-    }).json()
+    })
+    r.raise_for_status()
+    return r.json()
 
 
 class TablebaseTest(unittest.TestCase):
@@ -104,6 +106,21 @@ class TablebaseTest(unittest.TestCase):
         self.assertEqual(r["category"], "win")
         self.assertEqual(r["moves"][0]["san"], "Qg7#")
         self.assertEqual(r["moves"][0]["category"], "loss")
+
+    def test_kqvk(self):
+        standard("8/8/8/8/1Q4K1/8/k7/8 w - - 0 1")
+        standard("8/1k6/8/2K5/8/8/8/Q7 w - - 0 1")
+        standard("8/7k/8/4QK2/8/8/8/8 w - - 22 12")
+        standard("8/8/k7/2Q5/3K4/8/8/8 w - - 12 7")
+        standard("8/8/2k5/8/3K4/8/8/4Q3 w - - 0 1")
+        standard("8/8/8/8/8/5K2/5Q2/5k2 b - - 0 1")
+        standard("8/8/8/8/1Q4K1/8/8/k7 b - - 6 9")
+        standard("8/8/3k4/8/3K4/8/8/4Q3 b - - 1 1")
+        standard("8/8/7k/4Q3/4K3/8/8/8 w - - 20 11")
+
+    def test_kqvkb(self):
+        standard("8/8/8/8/3K4/4Qb2/5k2/8 b - - 0 1")
+        standard("8/8/4K3/8/3Q4/8/4k3/B7 b - - 0 1")
 
 
 if __name__ == "__main__":

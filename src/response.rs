@@ -5,6 +5,8 @@ use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{san::SanPlus, uci::UciMove, Role};
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded};
 
+use crate::{antichess_tb::Dtw, gaviota::Dtm};
+
 #[derive(Serialize, Debug, Clone)]
 pub struct TablebaseResponse {
     #[serde(flatten)]
@@ -45,8 +47,10 @@ pub struct PositionInfo {
     pub precise_dtz: Option<Dtz>,
     #[serde(skip)]
     pub dtz: Option<MaybeRounded<Dtz>>,
-    pub dtm: Option<i32>,
-    pub dtw: Option<i32>,
+    #[serde_as(as = "Option<FromInto<i32>>")]
+    pub dtm: Option<Dtm>,
+    #[serde_as(as = "Option<FromInto<i32>>")]
+    pub dtw: Option<Dtw>,
     #[serde(skip)]
     pub halfmoves: u32,
 }

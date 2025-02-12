@@ -1,70 +1,98 @@
-use std::{cmp::Reverse, sync::Arc};
+use std::cmp::Reverse;
 
+use futures_util::{stream::FuturesUnordered, StreamExt as _};
 use shakmaty::{
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
     Move, Outcome, Position as _,
 };
-use shakmaty_syzygy::{
-    filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
-};
-use tokio::{sync::Semaphore, task};
+use shakmaty_syzygy::{aio::Tablebase, Dtz, MaybeRounded, SyzygyError};
+use tokio::{join, task};
 use tracing::info;
 
 use crate::{
-    antichess_tb, gaviota,
+    antichess_tb,
+    antichess_tb::Dtw,
+    filesystem::{HotPrefixFilesystem, TokioUringFilesystem},
+    gaviota,
+    gaviota::Dtm,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
         TablebaseResponse,
     },
 };
 
-#[derive(Debug)]
 pub struct Tablebases {
-    pub standard: SyzygyTablebase<Chess>,
-    pub atomic: SyzygyTablebase<Atomic>,
-    pub antichess: SyzygyTablebase<Antichess>,
-    semaphore: Semaphore,
+    pub standard: Tablebase<Chess, HotPrefixFilesystem<TokioUringFilesystem>>,
+    pub atomic: Tablebase<Atomic, HotPrefixFilesystem<TokioUringFilesystem>>,
+    pub antichess: Tablebase<Antichess, HotPrefixFilesystem<TokioUringFilesystem>>,
 }
 
 impl Tablebases {
-    pub fn with_filesystem(fs: Arc<dyn Filesystem>) -> Tablebases {
+    pub fn with_filesystem(filesystem: HotPrefixFilesystem<TokioUringFilesystem>) -> Tablebases {
         Tablebases {
-            standard: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
-            atomic: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
-            antichess: SyzygyTablebase::with_filesystem(fs),
-            semaphore: Semaphore::new(128),
+            standard: Tablebase::with_filesystem(filesystem.clone()),
+            atomic: Tablebase::with_filesystem(filesystem.clone()),
+            antichess: Tablebase::with_filesystem(filesystem),
         }
     }
 
-    fn probe_dtz_blocking(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
+    async fn probe_dtz(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
         match *pos {
-            VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos),
+            VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos).await,
+            VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos).await,
+            VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos).await,
             _ => unimplemented!("variant not supported"),
         }
     }
 
-    fn best_move_blocking(
+    async fn probe_dtm(&self, pos: &VariantPosition) -> Option<Dtm> {
+        let VariantPosition::Chess(ref pos) = *pos else {
+            return None;
+        };
+
+        let pos = pos.clone();
+        task::spawn_blocking(move || unsafe { gaviota::probe_dtm(&pos) })
+            .await
+            .expect("blocking probe_dtm")
+    }
+
+    async fn probe_dtw(&self, pos: &VariantPosition) -> Option<Dtw> {
+        let VariantPosition::Antichess(ref pos) = *pos else {
+            return None;
+        };
+
+        let pos = pos.clone();
+        task::spawn_blocking(move || unsafe { antichess_tb::probe_dtw(&pos) })
+            .await
+            .expect("blocking probe_dtw")
+    }
+
+    async fn best_move(
         &self,
         pos: &VariantPosition,
     ) -> Result<Option<(Move, MaybeRounded<Dtz>)>, SyzygyError> {
         match *pos {
-            VariantPosition::Chess(ref pos) => self.standard.best_move(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos),
+            VariantPosition::Chess(ref pos) => self.standard.best_move(pos).await,
+            VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos).await,
+            VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos).await,
             _ => unimplemented!("variant not supported"),
         }
     }
 
-    fn position_info_blocking(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
+    async fn position_info(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
             Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
             _ => (false, false),
         };
 
-        let dtz = match self.probe_dtz_blocking(pos) {
+        let (dtz_result, dtm, dtw) = join!(
+            self.probe_dtz(pos),
+            self.probe_dtm(pos),
+            self.probe_dtw(pos)
+        );
+
+        let dtz = match dtz_result {
             Err(
                 SyzygyError::Castling
                 | SyzygyError::TooManyPieces
@@ -83,8 +111,8 @@ impl Tablebases {
             maybe_rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
             precise_dtz: dtz.and_then(MaybeRounded::precise),
             dtz,
-            dtm: unsafe { gaviota::probe_dtm(pos) },
-            dtw: unsafe { antichess_tb::probe_dtw(pos) },
+            dtm,
+            dtw,
             halfmoves: pos.halfmoves(),
         })
     }
@@ -93,27 +121,19 @@ impl Tablebases {
         &'static self,
         pos: VariantPosition,
     ) -> Result<TablebaseResponse, SyzygyError> {
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .expect("semaphore not closed");
         info!("begin");
 
         let halfmoves = pos.halfmoves();
 
-        let move_info_handles = pos
+        let move_info: FuturesUnordered<_> = pos
             .legal_moves()
             .into_iter()
             .map(|m| {
                 let uci = m.to_uci(pos.castles().mode());
-
                 let mut after = pos.clone();
                 let san = SanPlus::from_move_and_play_unchecked(&mut after, &m);
-
-                task::spawn_blocking(move || {
-                    let after_info = self.position_info_blocking(&after)?;
-
+                async move {
+                    let after_info = self.position_info(&after).await?;
                     Ok(MoveInfo {
                         uci,
                         san,
@@ -123,16 +143,14 @@ impl Tablebases {
                         category: after_info.category(halfmoves),
                         pos: after_info,
                     })
-                })
+                }
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        let pos_info_handle = task::spawn_blocking(move || self.position_info_blocking(&pos));
+        let (pos_info, move_info) = join!(self.position_info(&pos), move_info.collect::<Vec<_>>());
+        let pos_info = pos_info?;
+        let mut move_info = move_info.into_iter().collect::<Result<Vec<_>, _>>()?;
 
-        let mut move_info = Vec::with_capacity(move_info_handles.len());
-        for handle in move_info_handles {
-            move_info.push(handle.await.expect("move info")?);
-        }
         move_info.sort_by_key(|m: &MoveInfo| {
             (
                 PessimisticUnknown(m.category),
@@ -150,7 +168,7 @@ impl Tablebases {
                     .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                     .is_negative()
                 {
-                    Reverse(m.pos.dtm.or(m.pos.dtw))
+                    Reverse(m.pos.dtm.map(i32::from).or(m.pos.dtw.map(i32::from)))
                 } else {
                     Reverse(None)
                 },
@@ -159,7 +177,11 @@ impl Tablebases {
                     .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                     .is_positive()
                 {
-                    m.pos.dtm.or(m.pos.dtw).map(Reverse)
+                    m.pos
+                        .dtm
+                        .map(i32::from)
+                        .or(m.pos.dtw.map(i32::from))
+                        .map(Reverse)
                 } else {
                     None
                 },
@@ -178,7 +200,6 @@ impl Tablebases {
             )
         });
 
-        let pos_info = pos_info_handle.await.expect("pos info")?;
         let category = pos_info.category(halfmoves.saturating_sub(1));
 
         // Use category of previous position to infer maybe-win / maybe-loss,
@@ -214,13 +235,18 @@ impl Tablebases {
         })
     }
 
-    fn mainline_blocking(&self, mut pos: VariantPosition) -> Result<MainlineResponse, SyzygyError> {
-        let dtz = self.probe_dtz_blocking(&pos)?;
+    pub async fn mainline(
+        &self,
+        mut pos: VariantPosition,
+    ) -> Result<MainlineResponse, SyzygyError> {
+        info!("begin");
+
+        let dtz = self.probe_dtz(&pos).await?;
         let mut mainline = Vec::new();
 
         if !dtz.is_zero() {
             while pos.halfmoves() < 100 {
-                if let Some((m, dtz)) = self.best_move_blocking(&pos)? {
+                if let Some((m, dtz)) = self.best_move(&pos).await? {
                     mainline.push(MainlineStep {
                         uci: m.to_uci(pos.castles().mode()),
                         dtz: dtz.ignore_rounding(),
@@ -242,21 +268,5 @@ impl Tablebases {
                 .and_then(|o| o.winner())
                 .map(|winner| winner.char()),
         })
-    }
-
-    pub async fn mainline(
-        &'static self,
-        pos: VariantPosition,
-    ) -> Result<MainlineResponse, SyzygyError> {
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .expect("semaphore not closed");
-        info!("begin");
-
-        task::spawn_blocking(move || self.mainline_blocking(pos))
-            .await
-            .expect("mainline blocking")
     }
 }
