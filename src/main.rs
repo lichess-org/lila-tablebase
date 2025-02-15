@@ -123,13 +123,13 @@ async fn handle_probe(
                 .probe(variant.position(query.fen)?)
                 .await
                 .map_err(TablebaseError::from)
+                .inspect(|_| trace!("success"))
+                .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
         })
         .instrument(span)
         .await
         .map(Negotiate)
         .map_err(Arc::unwrap_or_clone)
-        .inspect(|_| trace!("success"))
-        .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
 }
 
 async fn handle_mainline(
