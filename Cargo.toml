@@ -17,7 +17,7 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 shakmaty = "0.27"
-shakmaty-syzygy = { version = "0.25", git = "https://github.com/niklasf/shakmaty-syzygy", features = ["variant", "mmap"] }
+shakmaty-syzygy = { version = "0.25", features = ["variant", "mmap"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
