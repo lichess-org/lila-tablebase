@@ -41,7 +41,7 @@ name | type | default | description
   "variant_win": false, // only in chess variants (atomic, antichess)
   "variant_loss": false, // only in chess variants
   "insufficient_material": false,
-  "category": "win", // win, unknown, maybe-win, cursed-win, draw, blessed-loss, maybe-loss, loss
+  "category": "win", // win, unknown, syzygy-win, maybe-win, cursed-win, draw, blessed-loss, maybe-loss, syzygy-loss, loss
   "moves": [ // information about legal moves, best first
     {
       "uci": "h7h8q",
@@ -56,7 +56,7 @@ name | type | default | description
       "variant_win": false,
       "variant_loss": false,
       "insufficient_material": false,
-      "category": "loss" // loss, unknown, maybe-loss, blessed-loss, draw, cursed-win, maybe-win, win
+      "category": "loss" // loss, unknown, syzygy-loss, maybe-loss, blessed-loss, draw, cursed-win, maybe-win, syzygy-win, win
     },
     // ...
   ]

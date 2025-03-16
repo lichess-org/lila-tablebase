@@ -78,11 +78,11 @@ impl PositionInfo {
             if halfmoves_before < 100 {
                 match AmbiguousWdl::from_dtz_and_halfmoves(dtz, self.halfmoves) {
                     AmbiguousWdl::Win => Category::Win,
-                    AmbiguousWdl::MaybeWin => Category::MaybeWin,
+                    AmbiguousWdl::MaybeWin => Category::SyzygyWin,
                     AmbiguousWdl::CursedWin => Category::CursedWin,
                     AmbiguousWdl::Draw => Category::Draw,
                     AmbiguousWdl::BlessedLoss => Category::BlessedLoss,
-                    AmbiguousWdl::MaybeLoss => Category::MaybeLoss,
+                    AmbiguousWdl::MaybeLoss => Category::SyzygyLoss,
                     AmbiguousWdl::Loss => Category::Loss,
                 }
             } else if dtz.is_negative() {
@@ -115,11 +115,13 @@ impl PositionInfo {
 pub enum Category {
     Loss,
     Unknown,
+    SyzygyLoss,
     MaybeLoss,
     BlessedLoss,
     Draw,
     CursedWin,
     MaybeWin,
+    SyzygyWin,
     Win,
 }
 
@@ -127,14 +129,14 @@ impl Category {
     pub fn is_negative(&self) -> bool {
         matches!(
             self,
-            Category::MaybeLoss | Category::BlessedLoss | Category::Loss
+            Category::SyzygyLoss | Category::MaybeLoss | Category::BlessedLoss | Category::Loss
         )
     }
 
     pub fn is_positive(&self) -> bool {
         matches!(
             self,
-            Category::CursedWin | Category::MaybeWin | Category::Win
+            Category::CursedWin | Category::MaybeWin | Category::SyzygyWin | Category::Win
         )
     }
 }
@@ -161,11 +163,13 @@ impl Neg for Category {
         match self {
             Category::Loss => Category::Win,
             Category::Unknown => Category::Unknown,
+            Category::SyzygyLoss => Category::SyzygyWin,
             Category::MaybeLoss => Category::MaybeWin,
             Category::BlessedLoss => Category::CursedWin,
             Category::Draw => Category::Draw,
             Category::CursedWin => Category::BlessedLoss,
             Category::MaybeWin => Category::MaybeLoss,
+            Category::SyzygyWin => Category::SyzygyLoss,
             Category::Win => Category::Loss,
         }
     }
