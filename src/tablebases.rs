@@ -14,7 +14,7 @@ use tracing::{error, info};
 
 use crate::{
     antichess_tb, gaviota,
-    op1::{Op1Client, Op1Response},
+    op1::{Dtc, Op1Client, Op1Response},
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
         TablebaseResponse,
@@ -165,17 +165,30 @@ impl Tablebases {
                     Reverse(m.pos.insufficient_material),
                 ),
                 if m.category.is_negative() {
-                    (Reverse(m.pos.dtm.or(m.pos.dtw)), Reverse(m.pos.dtc))
+                    (
+                        Reverse(m.pos.dtm.or(m.pos.dtw)),
+                        Reverse(if m.capture.is_some() {
+                            Some(Dtc(0))
+                        } else {
+                            m.pos.dtc
+                        }),
+                    )
                 } else {
                     (Reverse(None), Reverse(None))
                 },
                 if m.category.is_positive() {
-                    (m.pos.dtm.or(m.pos.dtw).map(Reverse), m.pos.dtc.map(Reverse))
+                    (
+                        m.pos.dtm.or(m.pos.dtw).map(Reverse),
+                        if m.capture.is_some() {
+                            Some(Reverse(Dtc(0)))
+                        } else {
+                            m.pos.dtc.map(Reverse)
+                        },
+                    )
                 } else {
                     (None, None)
                 },
                 m.zeroing ^ !m.category.is_positive(),
-                m.capture.is_some() ^ !m.category.is_positive(),
                 m.pos.maybe_rounded_dtz.map(Reverse),
                 (Reverse(m.capture), Reverse(m.promotion)),
             )
