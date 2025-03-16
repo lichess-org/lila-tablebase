@@ -123,6 +123,22 @@ pub enum Category {
     Win,
 }
 
+impl Category {
+    pub fn is_negative(&self) -> bool {
+        matches!(
+            self,
+            Category::MaybeLoss | Category::BlessedLoss | Category::Loss
+        )
+    }
+
+    pub fn is_positive(&self) -> bool {
+        matches!(
+            self,
+            Category::CursedWin | Category::MaybeWin | Category::Win
+        )
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PessimisticUnknown(pub Category); // loss < unknown < maybe-loss < ...
 
