@@ -174,16 +174,8 @@ impl Tablebases {
                 } else {
                     (None, None)
                 },
-                m.zeroing
-                    ^ !m.pos
-                        .dtz
-                        .unwrap_or(MaybeRounded::Precise(Dtz(0)))
-                        .is_positive(),
-                m.capture.is_some()
-                    ^ !m.pos
-                        .dtz
-                        .unwrap_or(MaybeRounded::Precise(Dtz(0)))
-                        .is_positive(),
+                m.zeroing ^ !m.category.is_positive(),
+                m.capture.is_some() ^ !m.category.is_positive(),
                 m.pos.maybe_rounded_dtz.map(Reverse),
                 (Reverse(m.capture), Reverse(m.promotion)),
             )
