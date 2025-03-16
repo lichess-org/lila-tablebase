@@ -21,16 +21,16 @@ impl Dtc {
     }
 
     #[must_use]
-    pub fn add_plies_saturating(self, plies: u32) -> Dtc {
+    pub fn add_moves_saturating(self, moves: u32) -> Dtc {
         match self {
             Dtc(0) => Dtc(0),
-            Dtc(n) if n > 0 => i32::try_from(plies)
+            Dtc(n) if n > 0 => i32::try_from(moves)
                 .ok()
-                .and_then(|plies| n.checked_add(plies))
+                .and_then(|moves| n.checked_add(moves))
                 .map_or(Dtc(i32::MAX), Dtc),
-            Dtc(n) => i32::try_from(plies)
+            Dtc(n) => i32::try_from(moves)
                 .ok()
-                .and_then(|plies| n.checked_sub(plies))
+                .and_then(|moves| n.checked_sub(moves))
                 .map_or(Dtc(i32::MIN), Dtc),
         }
     }

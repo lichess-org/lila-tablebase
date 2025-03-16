@@ -92,11 +92,11 @@ impl PositionInfo {
             }
         } else if let Some(dtc) = self.dtc {
             if halfmoves_before < 100 {
-                match dtc.add_plies_saturating(self.halfmoves) {
-                    Dtc(n) if n < -100 => Category::MaybeLoss,
+                match dtc.add_moves_saturating(self.halfmoves / 2) {
+                    Dtc(n) if n < -50 => Category::MaybeLoss,
                     Dtc(n) if n < 0 => Category::Loss,
                     Dtc(0) => Category::Draw,
-                    Dtc(n) if n <= 100 => Category::Win,
+                    Dtc(n) if n <= 50 => Category::Win,
                     Dtc(_) => Category::MaybeWin,
                 }
             } else if dtc.is_negative() {
