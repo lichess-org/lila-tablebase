@@ -169,18 +169,18 @@ impl Tablebases {
                     .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                     .is_negative()
                 {
-                    Reverse(m.pos.dtm.or(m.pos.dtw))
+                    Reverse((m.pos.dtm.or(m.pos.dtw), m.pos.dtc))
                 } else {
-                    Reverse(None)
+                    Reverse((None, None))
                 },
                 if m.pos
                     .dtz
                     .unwrap_or(MaybeRounded::Precise(Dtz(0)))
                     .is_positive()
                 {
-                    m.pos.dtm.or(m.pos.dtw).map(Reverse)
+                    (m.pos.dtm.or(m.pos.dtw).map(Reverse), m.pos.dtc.map(Reverse))
                 } else {
-                    None
+                    (None, None)
                 },
                 m.zeroing
                     ^ !m.pos
