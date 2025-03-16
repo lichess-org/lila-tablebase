@@ -5,6 +5,8 @@ use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{san::SanPlus, uci::UciMove, Role};
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded};
 
+use crate::op1::Dtc;
+
 #[derive(Serialize, Debug, Clone)]
 pub struct TablebaseResponse {
     #[serde(flatten)]
@@ -16,9 +18,7 @@ pub struct TablebaseResponse {
 #[serde_as]
 #[derive(Serialize, Debug, Clone)]
 pub struct MoveInfo {
-    #[serde_as(as = "DisplayFromStr")]
     pub uci: UciMove,
-    #[serde_as(as = "DisplayFromStr")]
     pub san: SanPlus,
     pub zeroing: bool,
     #[serde(skip)]
@@ -47,6 +47,7 @@ pub struct PositionInfo {
     pub dtz: Option<MaybeRounded<Dtz>>,
     pub dtm: Option<i32>,
     pub dtw: Option<i32>,
+    pub dtc: Option<Dtc>,
     #[serde(skip)]
     pub halfmoves: u32,
 }
@@ -57,7 +58,8 @@ impl PositionInfo {
             && !self.variant_loss
             && (self.stalemate
                 || self.insufficient_material
-                || self.dtz.is_some_and(|dtz| dtz.is_zero()))
+                || self.dtz.is_some_and(|dtz| dtz.is_zero())
+                || self.dtc.is_some_and(|dtc| dtc.is_zero()))
         {
             Category::Draw
         } else if self.checkmate || self.variant_loss {
@@ -84,6 +86,20 @@ impl PositionInfo {
                     AmbiguousWdl::Loss => Category::Loss,
                 }
             } else if dtz.is_negative() {
+                Category::BlessedLoss
+            } else {
+                Category::CursedWin
+            }
+        } else if let Some(dtc) = self.dtc {
+            if halfmoves_before < 100 {
+                match dtc.add_plies_saturating(self.halfmoves) {
+                    Dtc(n) if n < -100 => Category::MaybeLoss,
+                    Dtc(n) if n < 0 => Category::Loss,
+                    Dtc(0) => Category::Draw,
+                    Dtc(n) if n <= 100 => Category::Win,
+                    Dtc(_) => Category::MaybeWin,
+                }
+            } else if dtc.is_negative() {
                 Category::BlessedLoss
             } else {
                 Category::CursedWin

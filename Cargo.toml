@@ -16,7 +16,7 @@ axum-content-negotiation = "0.1.2"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
-shakmaty = "0.27"
+shakmaty = { version = "0.27.3", features = ["serde"] }
 shakmaty-syzygy = { version = "0.25", features = ["variant", "mmap"] }
 gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
@@ -29,6 +29,7 @@ tracing = "0.1"
 antichess-tb-sys = "0.1"
 tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"] }
 tower = "0.5"
+reqwest = { version = "0.12.14", features = ["json"] }
 
 [profile.release]
 lto = true

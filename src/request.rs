@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use serde::Deserialize;
-use serde_with::{serde_as, DisplayFromStr};
 use shakmaty::{
     fen::Fen,
     variant::{Variant, VariantPosition},
@@ -39,9 +38,7 @@ impl TablebaseVariant {
     }
 }
 
-#[serde_as]
 #[derive(Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct TablebaseQuery {
-    #[serde_as(as = "DisplayFromStr")]
     pub fen: Fen,
 }

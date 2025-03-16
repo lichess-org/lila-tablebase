@@ -5,6 +5,7 @@ mod errors;
 mod antichess_tb;
 mod filesystem;
 mod gaviota;
+mod op1;
 mod request;
 mod response;
 mod tablebases;
@@ -25,6 +26,7 @@ use axum_content_negotiation::{Negotiate, NegotiateLayer};
 use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
 use listenfd::ListenFd;
 use moka::future::Cache;
+use op1::Op1Client;
 use shakmaty_syzygy::filesystem::{MmapFilesystem, OsFilesystem};
 use tikv_jemallocator::Jemalloc;
 use tokio::net::{TcpListener, UnixListener};
@@ -60,6 +62,9 @@ struct Opt {
     /// Directory with Gaviota tablebase files.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     gaviota: Vec<PathBuf>,
+    // Op1 server.
+    #[arg(long)]
+    op1_endpoint: Option<String>,
 
     /// Directory with prefix files.
     ///
@@ -171,6 +176,7 @@ async fn main() {
         && opt.atomic.is_empty()
         && opt.antichess.is_empty()
         && opt.gaviota.is_empty()
+        && opt.op1_endpoint.is_none()
     {
         Opt::command().print_help().expect("usage");
         println!();
@@ -183,6 +189,7 @@ async fn main() {
         .without_time()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+
     let state: &'static AppState = Box::leak(Box::new(AppState {
         tbs: {
             // Initialize Gaviota tablebase.
@@ -235,6 +242,10 @@ async fn main() {
                     .expect("open antichess directory");
                 info!("added {} antichess tables from {}", n, path.display());
             }
+
+            // Initialize OP1
+            tbs.op1 = opt.op1_endpoint.map(|endpoint| Op1Client::new(&endpoint));
+
             tbs
         },
         cache: Cache::builder()

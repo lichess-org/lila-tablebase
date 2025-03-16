@@ -10,10 +10,11 @@ use shakmaty_syzygy::{
     filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
 };
 use tokio::{sync::Semaphore, task};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{
     antichess_tb, gaviota,
+    op1::{Op1Client, Op1Response},
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
         TablebaseResponse,
@@ -25,6 +26,7 @@ pub struct Tablebases {
     pub standard: SyzygyTablebase<Chess>,
     pub atomic: SyzygyTablebase<Atomic>,
     pub antichess: SyzygyTablebase<Antichess>,
+    pub op1: Option<Op1Client>,
     semaphore: Semaphore,
 }
 
@@ -34,6 +36,7 @@ impl Tablebases {
             standard: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
             atomic: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
             antichess: SyzygyTablebase::with_filesystem(fs),
+            op1: None,
             semaphore: Semaphore::new(256),
         }
     }
@@ -86,6 +89,7 @@ impl Tablebases {
             dtz,
             dtm: unsafe { gaviota::probe_dtm(pos) },
             dtw: unsafe { antichess_tb::probe_dtw(pos) },
+            dtc: None,
             halfmoves: pos.halfmoves(),
         })
     }
@@ -101,6 +105,17 @@ impl Tablebases {
             .expect("semaphore not closed");
         info!("begin");
 
+        let op1_response = match &self.op1 {
+            Some(op1_client) => op1_client
+                .probe_dtc(&pos)
+                .await
+                .inspect_err(|err| {
+                    error!("op1 error: {}", err);
+                })
+                .unwrap_or_default(),
+            None => Op1Response::default(),
+        };
+
         let halfmoves = pos.halfmoves();
 
         let move_info_handles = pos
@@ -108,12 +123,14 @@ impl Tablebases {
             .into_iter()
             .map(|m| {
                 let uci = m.to_uci(pos.castles().mode());
+                let dtc = op1_response.children.get(&uci).copied().unwrap_or_default();
 
                 let mut after = pos.clone();
                 let san = SanPlus::from_move_and_play_unchecked(&mut after, &m);
 
                 task::spawn_blocking(move || {
-                    let after_info = self.position_info_blocking(&after)?;
+                    let mut after_info = self.position_info_blocking(&after)?;
+                    after_info.dtc = dtc;
 
                     Ok(MoveInfo {
                         uci,
@@ -134,6 +151,7 @@ impl Tablebases {
         for handle in move_info_handles {
             move_info.push(handle.await.expect("move info")?);
         }
+
         move_info.sort_unstable_by_key(|m: &MoveInfo| {
             (
                 PessimisticUnknown(m.category),
@@ -179,11 +197,12 @@ impl Tablebases {
             )
         });
 
-        let pos_info = pos_info_handle.await.expect("pos info")?;
-        let category = pos_info.category(halfmoves.saturating_sub(1));
+        let mut pos_info = pos_info_handle.await.expect("pos info")?;
+        pos_info.dtc = op1_response.parent;
 
         // Use category of previous position to infer maybe-win / maybe-loss,
         // if possible.
+        let category = pos_info.category(halfmoves.saturating_sub(1));
         for (prev, maybe, correct) in [
             (Category::Win, Category::MaybeLoss, Category::Loss),
             (
