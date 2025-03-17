@@ -11,7 +11,6 @@ use crate::op1::Dtc;
 pub struct TablebaseResponse {
     #[serde(flatten)]
     pub pos: PositionInfo,
-    pub category: Category,
     pub moves: Vec<MoveInfo>,
 }
 
@@ -27,7 +26,28 @@ pub struct MoveInfo {
     pub promotion: Option<Role>,
     #[serde(flatten)]
     pub pos: PositionInfo,
-    pub category: Category,
+}
+
+pub struct PartialMoveInfo {
+    pub uci: UciMove,
+    pub san: SanPlus,
+    pub zeroing: bool,
+    pub capture: Option<Role>,
+    pub promotion: Option<Role>,
+    pub pos: PartialPositionInfo,
+}
+
+impl PartialMoveInfo {
+    pub fn with_dtc(self, dtc: Option<Dtc>, halfmoves_before: u32) -> MoveInfo {
+        MoveInfo {
+            uci: self.uci,
+            san: self.san,
+            zeroing: self.zeroing,
+            capture: self.capture,
+            promotion: self.promotion,
+            pos: self.pos.with_dtc(dtc, halfmoves_before),
+        }
+    }
 }
 
 #[serde_as]
@@ -43,69 +63,92 @@ pub struct PositionInfo {
     pub maybe_rounded_dtz: Option<Dtz>,
     #[serde_as(as = "Option<FromInto<i32>>")]
     pub precise_dtz: Option<Dtz>,
-    #[serde(skip)]
-    pub dtz: Option<MaybeRounded<Dtz>>,
     pub dtm: Option<i32>,
     pub dtw: Option<i32>,
     pub dtc: Option<Dtc>,
-    #[serde(skip)]
-    pub halfmoves: u32,
+    pub category: Category,
 }
 
-impl PositionInfo {
-    pub fn category(&self, halfmoves_before: u32) -> Category {
-        if !self.variant_win
-            && !self.variant_loss
-            && (self.stalemate
-                || self.insufficient_material
-                || self.dtz.is_some_and(|dtz| dtz.is_zero())
-                || self.dtc.is_some_and(|dtc| dtc.is_zero()))
-        {
-            Category::Draw
-        } else if self.checkmate || self.variant_loss {
-            if halfmoves_before < 100 {
-                Category::Loss
-            } else {
-                Category::BlessedLoss
-            }
-        } else if self.variant_win {
-            if halfmoves_before < 100 {
-                Category::Win
-            } else {
-                Category::CursedWin
-            }
-        } else if let Some(dtz) = self.dtz {
-            if halfmoves_before < 100 {
-                match AmbiguousWdl::from_dtz_and_halfmoves(dtz, self.halfmoves) {
-                    AmbiguousWdl::Win => Category::Win,
-                    AmbiguousWdl::MaybeWin => Category::SyzygyWin,
-                    AmbiguousWdl::CursedWin => Category::CursedWin,
-                    AmbiguousWdl::Draw => Category::Draw,
-                    AmbiguousWdl::BlessedLoss => Category::BlessedLoss,
-                    AmbiguousWdl::MaybeLoss => Category::SyzygyLoss,
-                    AmbiguousWdl::Loss => Category::Loss,
+pub struct PartialPositionInfo {
+    pub checkmate: bool,
+    pub stalemate: bool,
+    pub variant_win: bool,
+    pub variant_loss: bool,
+    pub insufficient_material: bool,
+    pub halfmoves: u32,
+    pub dtz: Option<MaybeRounded<Dtz>>,
+    pub dtm: Option<i32>,
+    pub dtw: Option<i32>,
+}
+
+impl PartialPositionInfo {
+    pub fn with_dtc(self, dtc: Option<Dtc>, halfmoves_before: u32) -> PositionInfo {
+        PositionInfo {
+            category: {
+                if !self.variant_win
+                    && !self.variant_loss
+                    && (self.stalemate
+                        || self.insufficient_material
+                        || self.dtz.is_some_and(|dtz| dtz.is_zero())
+                        || dtc.is_some_and(|dtc| dtc.is_zero()))
+                {
+                    Category::Draw
+                } else if self.checkmate || self.variant_loss {
+                    if halfmoves_before < 100 {
+                        Category::Loss
+                    } else {
+                        Category::BlessedLoss
+                    }
+                } else if self.variant_win {
+                    if halfmoves_before < 100 {
+                        Category::Win
+                    } else {
+                        Category::CursedWin
+                    }
+                } else if let Some(dtz) = self.dtz {
+                    if halfmoves_before < 100 {
+                        match AmbiguousWdl::from_dtz_and_halfmoves(dtz, self.halfmoves) {
+                            AmbiguousWdl::Win => Category::Win,
+                            AmbiguousWdl::MaybeWin => Category::SyzygyWin,
+                            AmbiguousWdl::CursedWin => Category::CursedWin,
+                            AmbiguousWdl::Draw => Category::Draw,
+                            AmbiguousWdl::BlessedLoss => Category::BlessedLoss,
+                            AmbiguousWdl::MaybeLoss => Category::SyzygyLoss,
+                            AmbiguousWdl::Loss => Category::Loss,
+                        }
+                    } else if dtz.is_negative() {
+                        Category::BlessedLoss
+                    } else {
+                        Category::CursedWin
+                    }
+                } else if let Some(dtc) = dtc {
+                    if halfmoves_before < 100 {
+                        match dtc.add_moves_saturating(self.halfmoves / 2) {
+                            Dtc(n) if n <= -50 => Category::MaybeLoss,
+                            Dtc(n) if n < 0 => Category::Loss,
+                            Dtc(0) => Category::Draw,
+                            Dtc(n) if n < 50 => Category::Win,
+                            Dtc(_) => Category::MaybeWin,
+                        }
+                    } else if dtc.is_negative() {
+                        Category::BlessedLoss
+                    } else {
+                        Category::CursedWin
+                    }
+                } else {
+                    Category::Unknown
                 }
-            } else if dtz.is_negative() {
-                Category::BlessedLoss
-            } else {
-                Category::CursedWin
-            }
-        } else if let Some(dtc) = self.dtc {
-            if halfmoves_before < 100 {
-                match dtc.add_moves_saturating(self.halfmoves / 2) {
-                    Dtc(n) if n <= -50 => Category::MaybeLoss,
-                    Dtc(n) if n < 0 => Category::Loss,
-                    Dtc(0) => Category::Draw,
-                    Dtc(n) if n < 50 => Category::Win,
-                    Dtc(_) => Category::MaybeWin,
-                }
-            } else if dtc.is_negative() {
-                Category::BlessedLoss
-            } else {
-                Category::CursedWin
-            }
-        } else {
-            Category::Unknown
+            },
+            checkmate: self.checkmate,
+            stalemate: self.stalemate,
+            variant_win: self.variant_win,
+            variant_loss: self.variant_loss,
+            insufficient_material: self.insufficient_material,
+            maybe_rounded_dtz: self.dtz.map(MaybeRounded::ignore_rounding),
+            precise_dtz: self.dtz.and_then(MaybeRounded::precise),
+            dtm: self.dtm,
+            dtw: self.dtw,
+            dtc,
         }
     }
 }

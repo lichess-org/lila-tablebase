@@ -16,8 +16,8 @@ use crate::{
     antichess_tb, gaviota,
     op1::{Dtc, Op1Client, Op1Response},
     response::{
-        Category, MainlineResponse, MainlineStep, MoveInfo, PessimisticUnknown, PositionInfo,
-        TablebaseResponse,
+        Category, MainlineResponse, MainlineStep, MoveInfo, PartialMoveInfo, PartialPositionInfo,
+        PessimisticUnknown, TablebaseResponse,
     },
 };
 
@@ -62,7 +62,10 @@ impl Tablebases {
         }
     }
 
-    fn position_info_blocking(&self, pos: &VariantPosition) -> Result<PositionInfo, SyzygyError> {
+    fn partial_position_info_blocking(
+        &self,
+        pos: &VariantPosition,
+    ) -> Result<PartialPositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
             Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
             _ => (false, false),
@@ -78,19 +81,16 @@ impl Tablebases {
             Ok(res) => Some(res),
         };
 
-        Ok(PositionInfo {
+        Ok(PartialPositionInfo {
             checkmate: pos.is_checkmate(),
             stalemate: pos.is_stalemate(),
             variant_win,
             variant_loss,
             insufficient_material: pos.is_insufficient_material(),
-            maybe_rounded_dtz: dtz.map(MaybeRounded::ignore_rounding),
-            precise_dtz: dtz.and_then(MaybeRounded::precise),
+            halfmoves: pos.halfmoves(),
             dtz,
             dtm: unsafe { gaviota::probe_dtm(pos) },
             dtw: unsafe { antichess_tb::probe_dtw(pos) },
-            dtc: None,
-            halfmoves: pos.halfmoves(),
         })
     }
 
@@ -105,6 +105,33 @@ impl Tablebases {
             .expect("semaphore not closed");
         info!("begin");
 
+        let move_info_handles = pos
+            .legal_moves()
+            .into_iter()
+            .map(|m| {
+                let uci = m.to_uci(pos.castles().mode());
+
+                let mut after = pos.clone();
+                let san = SanPlus::from_move_and_play_unchecked(&mut after, &m);
+
+                task::spawn_blocking(move || {
+                    Ok(PartialMoveInfo {
+                        uci,
+                        san,
+                        capture: m.capture(),
+                        promotion: m.promotion(),
+                        zeroing: m.is_zeroing(),
+                        pos: self.partial_position_info_blocking(&after)?,
+                    })
+                })
+            })
+            .collect::<ArrayVec<_, 256>>();
+
+        let pos_info_handle = {
+            let pos = pos.clone();
+            task::spawn_blocking(move || self.partial_position_info_blocking(&pos))
+        };
+
         let op1_response = match &self.op1 {
             Some(op1_client) => op1_client
                 .probe_dtc(&pos)
@@ -116,45 +143,20 @@ impl Tablebases {
             None => Op1Response::default(),
         };
 
-        let halfmoves = pos.halfmoves();
-
-        let move_info_handles = pos
-            .legal_moves()
-            .into_iter()
-            .map(|m| {
-                let uci = m.to_uci(pos.castles().mode());
-                let dtc = op1_response.children.get(&uci).copied().unwrap_or_default();
-
-                let mut after = pos.clone();
-                let san = SanPlus::from_move_and_play_unchecked(&mut after, &m);
-
-                task::spawn_blocking(move || {
-                    let mut after_info = self.position_info_blocking(&after)?;
-                    after_info.dtc = dtc;
-
-                    Ok(MoveInfo {
-                        uci,
-                        san,
-                        capture: m.capture(),
-                        promotion: m.promotion(),
-                        zeroing: m.is_zeroing(),
-                        category: after_info.category(halfmoves),
-                        pos: after_info,
-                    })
-                })
-            })
-            .collect::<ArrayVec<_, 256>>();
-
-        let pos_info_handle = task::spawn_blocking(move || self.position_info_blocking(&pos));
-
         let mut move_info = Vec::with_capacity(move_info_handles.len());
         for handle in move_info_handles {
-            move_info.push(handle.await.expect("move info")?);
+            let partial = handle.await.expect("move info")?;
+            let dtc = op1_response
+                .children
+                .get(&partial.uci)
+                .copied()
+                .unwrap_or_default();
+            move_info.push(partial.with_dtc(dtc, pos.halfmoves()));
         }
 
         move_info.sort_unstable_by_key(|m: &MoveInfo| {
             (
-                PessimisticUnknown(m.category),
+                PessimisticUnknown(m.pos.category),
                 (
                     Reverse(m.pos.checkmate),
                     Reverse(m.pos.variant_loss),
@@ -164,7 +166,7 @@ impl Tablebases {
                     Reverse(m.pos.stalemate),
                     Reverse(m.pos.insufficient_material),
                 ),
-                if m.category.is_negative() {
+                if m.pos.category.is_negative() {
                     (
                         Reverse(m.pos.dtm.or(m.pos.dtw)),
                         Reverse(if m.capture.is_some() {
@@ -176,7 +178,7 @@ impl Tablebases {
                 } else {
                     (Reverse(None), Reverse(None))
                 },
-                if m.category.is_positive() {
+                if m.pos.category.is_positive() {
                     (
                         m.pos.dtm.or(m.pos.dtw).map(Reverse),
                         if m.capture.is_some() {
@@ -188,18 +190,19 @@ impl Tablebases {
                 } else {
                     (None, None)
                 },
-                m.zeroing ^ !m.category.is_positive(),
+                m.zeroing ^ !m.pos.category.is_positive(),
                 m.pos.maybe_rounded_dtz.map(Reverse),
                 (Reverse(m.capture), Reverse(m.promotion)),
             )
         });
 
-        let mut pos_info = pos_info_handle.await.expect("pos info")?;
-        pos_info.dtc = op1_response.parent;
+        let mut pos_info = pos_info_handle
+            .await
+            .expect("pos info")?
+            .with_dtc(op1_response.parent, pos.halfmoves().saturating_sub(1));
 
         // Use category of previous position to infer syzygy-win / syzygy-loss,
         // if possible.
-        let category = pos_info.category(halfmoves.saturating_sub(1));
         for (prev, ambiguous, correct) in [
             (Category::Win, Category::SyzygyLoss, Category::Loss),
             (
@@ -214,19 +217,21 @@ impl Tablebases {
             ),
             (Category::Loss, Category::SyzygyWin, Category::Win),
         ] {
-            if category == prev {
+            if pos_info.category == prev {
                 for m in &mut move_info {
-                    if m.category != ambiguous {
+                    if m.pos.category != ambiguous {
                         break;
                     }
-                    m.category = correct;
+                    m.pos.category = correct;
                 }
             }
+        }
+        if let Some(best_move) = move_info.first() {
+            pos_info.category = -best_move.pos.category;
         }
 
         Ok(TablebaseResponse {
             pos: pos_info,
-            category: move_info.first().map_or(category, |m| -m.category),
             moves: move_info,
         })
     }
