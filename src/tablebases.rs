@@ -197,26 +197,26 @@ impl Tablebases {
         let mut pos_info = pos_info_handle.await.expect("pos info")?;
         pos_info.dtc = op1_response.parent;
 
-        // Use category of previous position to infer maybe-win / maybe-loss,
+        // Use category of previous position to infer syzygy-win / syzygy-loss,
         // if possible.
         let category = pos_info.category(halfmoves.saturating_sub(1));
-        for (prev, maybe, correct) in [
-            (Category::Win, Category::MaybeLoss, Category::Loss),
+        for (prev, ambiguous, correct) in [
+            (Category::Win, Category::SyzygyLoss, Category::Loss),
             (
                 Category::CursedWin,
-                Category::MaybeLoss,
+                Category::SyzygyLoss,
                 Category::BlessedLoss,
             ),
             (
                 Category::BlessedLoss,
-                Category::MaybeWin,
+                Category::SyzygyWin,
                 Category::CursedWin,
             ),
-            (Category::Loss, Category::MaybeWin, Category::Win),
+            (Category::Loss, Category::SyzygyWin, Category::Win),
         ] {
             if category == prev {
                 for m in &mut move_info {
-                    if m.category != maybe {
+                    if m.category != ambiguous {
                         break;
                     }
                     m.category = correct;
