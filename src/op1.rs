@@ -49,32 +49,25 @@ pub struct Op1Client {
 }
 
 fn is_currently_supported(pos: &Chess) -> bool {
-    let kbp = ByRole {
-        king: 1,
-        bishop: 1,
-        pawn: 1,
-        ..Default::default()
-    };
-    let kpppp = ByRole {
-        king: 1,
-        pawn: 4,
-        ..Default::default()
+    let kbp_v_kppp = ByColor {
+        white: ByRole {
+            king: 1,
+            bishop: 1,
+            pawn: 1,
+            ..Default::default()
+        },
+        black: ByRole {
+            king: 1,
+            pawn: 4,
+            ..Default::default()
+        },
     };
 
     let material = pos.board().material();
-    material
-        == ByColor {
-            white: kbp,
-            black: kpppp,
-        }
-        || material
-            == ByColor {
-                white: kpppp,
-                black: kbp,
-            }
+    material == kbp_v_kppp || material == kbp_v_kppp.into_swapped()
 }
 
-fn is_op1(pos: &Chess) -> bool {
+fn is_supported_op1(pos: &Chess) -> bool {
     let white_pawns = pos.board().white() & pos.board().pawns();
     let white_pawn_paths = white_pawns.shift(8)
         | white_pawns.shift(16)
@@ -85,6 +78,7 @@ fn is_op1(pos: &Chess) -> bool {
     pos.board().occupied().count() == 8
         && !pos.castles().any()
         && (white_pawn_paths & pos.board().black() & pos.board().pawns()).any()
+        && is_currently_supported(pos)
 }
 
 impl Op1Client {
@@ -103,15 +97,15 @@ impl Op1Client {
             return Ok(Op1Response::default());
         };
 
-        if pos.board().occupied().count() > 9 || pos.board().occupied().count() < 8 {
+        if pos.board().occupied().count() != 8 && pos.board().occupied().count() != 9 {
             return Ok(Op1Response::default());
         }
 
-        if !(is_op1(pos) && is_currently_supported(pos))
-            && !pos.legal_moves().into_iter().any(|m| {
+        if !is_supported_op1(pos)
+            && pos.legal_moves().into_iter().all(|m| {
                 let mut after = pos.clone();
                 after.play_unchecked(&m);
-                is_op1(&after) && is_currently_supported(&after)
+                !is_supported_op1(&after)
             })
         {
             return Ok(Op1Response::default());
