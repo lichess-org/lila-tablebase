@@ -49,7 +49,7 @@ pub struct Op1Client {
 }
 
 fn is_currently_supported(pos: &Chess) -> bool {
-    let kbp_v_kppp = ByColor {
+    let kbp_v_kpppp = ByColor {
         white: ByRole {
             king: 1,
             bishop: 1,
@@ -64,7 +64,7 @@ fn is_currently_supported(pos: &Chess) -> bool {
     };
 
     let material = pos.board().material();
-    material == kbp_v_kppp || material == kbp_v_kppp.into_swapped()
+    material == kbp_v_kpppp || material == kbp_v_kpppp.into_swapped()
 }
 
 fn is_supported_op1(pos: &Chess) -> bool {
