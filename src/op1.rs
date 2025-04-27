@@ -63,8 +63,45 @@ fn is_currently_supported(pos: &Chess) -> bool {
         },
     };
 
+    let kbnnp_v_kqp = ByColor {
+        white: ByRole {
+            king: 1,
+            bishop: 1,
+            knight: 2,
+            pawn: 1,
+            ..Default::default()
+        },
+        black: ByRole {
+            king: 1,
+            queen: 1,
+            pawn: 1,
+            ..Default::default()
+        },
+    };
+
+    let krbbp_v_kqp = ByColor {
+        white: ByRole {
+            king: 1,
+            rook: 1,
+            bishop: 2,
+            pawn: 1,
+            ..Default::default()
+        },
+        black: ByRole {
+            king: 1,
+            queen: 1,
+            pawn: 1,
+            ..Default::default()
+        },
+    };
+
     let material = pos.board().material();
-    material == kbp_v_kpppp || material == kbp_v_kpppp.into_swapped()
+    material == kbp_v_kpppp
+        || material == kbp_v_kpppp.into_swapped()
+        || material == kbnnp_v_kqp
+        || material == kbnnp_v_kqp.into_swapped()
+        || material == krbbp_v_kqp
+        || material == krbbp_v_kqp.into_swapped()
 }
 
 fn is_supported_op1(pos: &Chess) -> bool {
