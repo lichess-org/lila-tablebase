@@ -1,10 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use shakmaty::{
-    fen::Fen, uci::UciMove, variant::VariantPosition, ByColor, ByRole, Chess, EnPassantMode,
-    Position,
-};
+use shakmaty::{fen::Fen, uci::UciMove, variant::VariantPosition, Chess, EnPassantMode, Position};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Dtc(pub i32);
