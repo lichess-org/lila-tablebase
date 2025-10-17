@@ -38,7 +38,18 @@ impl TablebaseVariant {
     }
 }
 
+#[derive(Deserialize, Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum Op1Mode {
+    #[default]
+    Never,
+    Auxiliary,
+    Always,
+}
+
 #[derive(Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct TablebaseQuery {
     pub fen: Fen,
+    #[serde(default)]
+    pub op1: Op1Mode,
 }

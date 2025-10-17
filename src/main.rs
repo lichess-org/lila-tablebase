@@ -125,7 +125,7 @@ async fn handle_probe(
         .try_get_with((variant, query.clone()), async move {
             app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
             app.tbs
-                .probe(variant.position(query.fen)?)
+                .probe(variant.position(query.fen)?, query.op1)
                 .await
                 .map_err(TablebaseError::from)
                 .inspect(|_| trace!("success"))

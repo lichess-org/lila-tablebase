@@ -15,6 +15,7 @@ use tracing::{error, info};
 use crate::{
     antichess_tb, gaviota,
     op1::{Dtc, Op1Client, Op1Response},
+    request::Op1Mode,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PartialMoveInfo, PartialPositionInfo,
         PessimisticUnknown, TablebaseResponse,
@@ -97,6 +98,7 @@ impl Tablebases {
     pub async fn probe(
         &'static self,
         pos: VariantPosition,
+        op1_mode: Op1Mode,
     ) -> Result<TablebaseResponse, SyzygyError> {
         let _permit = self
             .semaphore
@@ -134,7 +136,7 @@ impl Tablebases {
 
         let op1_response = match &self.op1 {
             Some(op1_client) => op1_client
-                .probe_dtc(&pos)
+                .probe_dtc(&pos, op1_mode)
                 .await
                 .inspect_err(|err| {
                     error!("op1 error: {}", err);
