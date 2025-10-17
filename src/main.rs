@@ -114,7 +114,7 @@ async fn handle_probe(
     Path(variant): Path<TablebaseVariant>,
     Query(query): Query<TablebaseQuery>,
 ) -> Result<Negotiate<TablebaseResponse>, TablebaseError> {
-    let pieces = query.fen.0.board.occupied().count();
+    let pieces = query.fen.as_setup().board.occupied().count();
     let span = match variant {
         TablebaseVariant::Standard => info_span!("standard request", fen = %query.fen, pieces),
         TablebaseVariant::Atomic => info_span!("atomic request", fen = %query.fen, pieces),

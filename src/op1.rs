@@ -97,17 +97,19 @@ impl Op1Client {
         if !is_supported_op1(pos, op1_mode)
             && pos.legal_moves().into_iter().all(|m| {
                 let mut after = pos.clone();
-                after.play_unchecked(&m);
+                after.play_unchecked(m);
                 !is_supported_op1(&after, op1_mode)
             })
         {
             return Ok(Op1Response::default());
         }
 
-        let fen = Fen::from_setup(pos.clone().into_setup(EnPassantMode::Legal));
         self.client
             .get(&self.endpoint)
-            .query(&[("fen", fen.to_string())])
+            .query(&[(
+                "fen",
+                Fen::from_position(pos, EnPassantMode::Legal).to_string(),
+            )])
             .send()
             .await?
             .error_for_status()?

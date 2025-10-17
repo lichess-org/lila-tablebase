@@ -4,7 +4,7 @@ use arrayvec::ArrayVec;
 use shakmaty::{
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
-    Move, Outcome, Position as _,
+    KnownOutcome, Move, Outcome, Position as _,
 };
 use shakmaty_syzygy::{
     filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
@@ -68,7 +68,9 @@ impl Tablebases {
         pos: &VariantPosition,
     ) -> Result<PartialPositionInfo, SyzygyError> {
         let (variant_win, variant_loss) = match pos.variant_outcome() {
-            Some(Outcome::Decisive { winner }) => (winner == pos.turn(), winner != pos.turn()),
+            Outcome::Known(KnownOutcome::Decisive { winner }) => {
+                (winner == pos.turn(), winner != pos.turn())
+            }
             _ => (false, false),
         };
 
@@ -114,7 +116,7 @@ impl Tablebases {
                 let uci = m.to_uci(pos.castles().mode());
 
                 let mut after = pos.clone();
-                let san = SanPlus::from_move_and_play_unchecked(&mut after, &m);
+                let san = SanPlus::from_move_and_play_unchecked(&mut after, m);
 
                 task::spawn_blocking(move || {
                     Ok(PartialMoveInfo {
@@ -249,7 +251,7 @@ impl Tablebases {
                         uci: m.to_uci(pos.castles().mode()),
                         dtz: dtz.ignore_rounding(),
                         precise_dtz: dtz.precise(),
-                        san: SanPlus::from_move_and_play_unchecked(&mut pos, &m),
+                        san: SanPlus::from_move_and_play_unchecked(&mut pos, m),
                     });
                 } else {
                     break;
@@ -261,10 +263,7 @@ impl Tablebases {
             dtz: dtz.ignore_rounding(),
             precise_dtz: dtz.precise(),
             mainline,
-            winner: pos
-                .outcome()
-                .and_then(|o| o.winner())
-                .map(|winner| winner.char()),
+            winner: pos.outcome().winner().map(|winner| winner.char()),
         })
     }
 
