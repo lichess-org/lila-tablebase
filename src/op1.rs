@@ -38,7 +38,7 @@ impl Dtc {
 
 #[derive(Deserialize, Debug, Default)]
 pub struct Op1Response {
-    pub parent: Option<Dtc>,
+    pub root: Option<Dtc>,
     pub children: HashMap<UciMove, Option<Dtc>>,
 }
 
@@ -46,62 +46,6 @@ pub struct Op1Response {
 pub struct Op1Client {
     endpoint: String,
     client: reqwest::Client,
-}
-
-fn is_currently_supported(pos: &Chess) -> bool {
-    let kbp_v_kpppp = ByColor {
-        white: ByRole {
-            king: 1,
-            bishop: 1,
-            pawn: 1,
-            ..Default::default()
-        },
-        black: ByRole {
-            king: 1,
-            pawn: 4,
-            ..Default::default()
-        },
-    };
-
-    let kbnnp_v_kqp = ByColor {
-        white: ByRole {
-            king: 1,
-            bishop: 1,
-            knight: 2,
-            pawn: 1,
-            ..Default::default()
-        },
-        black: ByRole {
-            king: 1,
-            queen: 1,
-            pawn: 1,
-            ..Default::default()
-        },
-    };
-
-    let krbbp_v_kqp = ByColor {
-        white: ByRole {
-            king: 1,
-            rook: 1,
-            bishop: 2,
-            pawn: 1,
-            ..Default::default()
-        },
-        black: ByRole {
-            king: 1,
-            queen: 1,
-            pawn: 1,
-            ..Default::default()
-        },
-    };
-
-    let material = pos.board().material();
-    material == kbp_v_kpppp
-        || material == kbp_v_kpppp.into_swapped()
-        || material == kbnnp_v_kqp
-        || material == kbnnp_v_kqp.into_swapped()
-        || material == krbbp_v_kqp
-        || material == krbbp_v_kqp.into_swapped()
 }
 
 fn is_supported_op1(pos: &Chess) -> bool {
@@ -115,7 +59,6 @@ fn is_supported_op1(pos: &Chess) -> bool {
     pos.board().occupied().count() == 8
         && !pos.castles().any()
         && (white_pawn_paths & pos.board().black() & pos.board().pawns()).any()
-        && is_currently_supported(pos)
 }
 
 impl Op1Client {

@@ -199,7 +199,7 @@ impl Tablebases {
         let mut pos_info = pos_info_handle
             .await
             .expect("pos info")?
-            .with_dtc(op1_response.parent, pos.halfmoves().saturating_sub(1));
+            .with_dtc(op1_response.root, pos.halfmoves().saturating_sub(1));
 
         // Use category of previous position to infer syzygy-win / syzygy-loss,
         // if possible.
