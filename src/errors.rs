@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc};
+use std::{error::Error, fmt, sync::Arc};
 
 use axum::{
     http::StatusCode,
@@ -24,6 +24,7 @@ pub enum TablebaseError {
     Fen(ParseFenError),
     Position(Arc<PositionError<VariantPosition>>),
     Syzygy(Arc<SyzygyError>),
+    UpstreamRequest(Arc<reqwest::Error>),
 }
 
 impl TablebaseError {
@@ -37,6 +38,7 @@ impl TablebaseError {
                     tracing::Level::ERROR
                 }
             },
+            TablebaseError::UpstreamRequest(_) => tracing::Level::ERROR,
         }
     }
 }
@@ -47,6 +49,15 @@ impl fmt::Display for TablebaseError {
             TablebaseError::Fen(err) => err.fmt(f),
             TablebaseError::Position(err) => err.fmt(f),
             TablebaseError::Syzygy(err) => err.fmt(f),
+            TablebaseError::UpstreamRequest(err) => {
+                let mut err: &dyn Error = err;
+                write!(f, "upstream request failed: {err}")?;
+                while let Some(src) = err.source() {
+                    write!(f, "-> {src}")?;
+                    err = src;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -69,6 +80,12 @@ impl From<SyzygyError> for TablebaseError {
     }
 }
 
+impl From<reqwest::Error> for TablebaseError {
+    fn from(v: reqwest::Error) -> TablebaseError {
+        TablebaseError::UpstreamRequest(Arc::new(v))
+    }
+}
+
 impl IntoResponse for TablebaseError {
     fn into_response(self) -> Response {
         (match self {
@@ -82,6 +99,9 @@ impl IntoResponse for TablebaseError {
                     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
                 }
             },
+            TablebaseError::UpstreamRequest(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
         })
         .into_response()
     }

@@ -127,7 +127,6 @@ async fn handle_probe(
             app.tbs
                 .probe(variant.position(query.fen)?, query.op1)
                 .await
-                .map_err(TablebaseError::from)
                 .inspect(|_| trace!("success"))
                 .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
         })

@@ -10,10 +10,12 @@ use shakmaty_syzygy::{
     filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
 };
 use tokio::{sync::Semaphore, task};
-use tracing::{error, info};
+use tracing::info;
 
 use crate::{
-    antichess_tb, gaviota,
+    antichess_tb,
+    errors::TablebaseError,
+    gaviota,
     op1::{Dtc, Op1Client, Op1Response},
     request::Op1Mode,
     response::{
@@ -101,7 +103,7 @@ impl Tablebases {
         &'static self,
         pos: VariantPosition,
         op1_mode: Op1Mode,
-    ) -> Result<TablebaseResponse, SyzygyError> {
+    ) -> Result<TablebaseResponse, TablebaseError> {
         let _permit = self
             .semaphore
             .acquire()
@@ -119,14 +121,15 @@ impl Tablebases {
                 let san = SanPlus::from_move_and_play_unchecked(&mut after, m);
 
                 task::spawn_blocking(move || {
-                    Ok(PartialMoveInfo {
-                        uci,
-                        san,
-                        capture: m.capture(),
-                        promotion: m.promotion(),
-                        zeroing: m.is_zeroing(),
-                        pos: self.partial_position_info_blocking(&after)?,
-                    })
+                    self.partial_position_info_blocking(&after)
+                        .map(|pos| PartialMoveInfo {
+                            uci,
+                            san,
+                            capture: m.capture(),
+                            promotion: m.promotion(),
+                            zeroing: m.is_zeroing(),
+                            pos,
+                        })
                 })
             })
             .collect::<ArrayVec<_, 256>>();
@@ -137,13 +140,7 @@ impl Tablebases {
         };
 
         let op1_response = match &self.op1 {
-            Some(op1_client) => op1_client
-                .probe_dtc(&pos, op1_mode)
-                .await
-                .inspect_err(|err| {
-                    error!("op1 error: {}", err);
-                })
-                .unwrap_or_default(),
+            Some(op1_client) => op1_client.probe_dtc(&pos, op1_mode).await?,
             None => Op1Response::default(),
         };
 
