@@ -20,6 +20,7 @@ pub struct MoveInfo {
     pub uci: UciMove,
     pub san: SanPlus,
     pub zeroing: bool,
+    pub conversion: bool,
     #[serde(skip)]
     pub capture: Option<Role>,
     #[serde(skip)]
@@ -32,6 +33,7 @@ pub struct PartialMoveInfo {
     pub uci: UciMove,
     pub san: SanPlus,
     pub zeroing: bool,
+    pub conversion: bool,
     pub capture: Option<Role>,
     pub promotion: Option<Role>,
     pub pos: PartialPositionInfo,
@@ -43,6 +45,7 @@ impl PartialMoveInfo {
             uci: self.uci,
             san: self.san,
             zeroing: self.zeroing,
+            conversion: self.conversion,
             capture: self.capture,
             promotion: self.promotion,
             pos: self.pos.with_dtc(dtc, halfmoves_before),

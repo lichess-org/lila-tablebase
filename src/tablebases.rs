@@ -128,6 +128,7 @@ impl Tablebases {
                             capture: m.capture(),
                             promotion: m.promotion(),
                             zeroing: m.is_zeroing(),
+                            conversion: m.is_conversion(),
                             pos,
                         })
                 })
@@ -170,7 +171,7 @@ impl Tablebases {
                 if m.pos.category.is_negative() {
                     (
                         Reverse(m.pos.dtm.or(m.pos.dtw)),
-                        Reverse(if m.capture.is_some() || m.promotion.is_some() {
+                        Reverse(if m.conversion {
                             Some(Dtc(0))
                         } else {
                             m.pos.dtc
@@ -182,7 +183,7 @@ impl Tablebases {
                 if m.pos.category.is_positive() {
                     (
                         m.pos.dtm.or(m.pos.dtw).map(Reverse),
-                        if m.capture.is_some() || m.promotion.is_some() {
+                        if m.conversion {
                             Some(Reverse(Dtc(0)))
                         } else {
                             m.pos.dtc.map(Reverse)

@@ -1825,8 +1825,7 @@ dependencies = [
 [[package]]
 name = "shakmaty"
 version = "0.29.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c9c2cd9af0c347da52db74fa0bed4b20d1995d175424672d09253a8e263986"
+source = "git+https://github.com/niklasf/shakmaty.git#b1799d371dd35a22297221acc7f5efcf42f67690"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1838,8 +1837,7 @@ dependencies = [
 [[package]]
 name = "shakmaty-syzygy"
 version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be98fab6d914aea4bb82b07d4bca4cdd2ed08de958e6406dc15acf4c7495c186"
+source = "git+https://github.com/niklasf/shakmaty.git#b1799d371dd35a22297221acc7f5efcf42f67690"
 dependencies = [
  "arrayvec",
  "bitflags",
