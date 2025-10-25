@@ -1,11 +1,14 @@
-use std::{cmp::Ordering, ops::Neg};
+use std::{
+    cmp::{Ordering, Reverse},
+    ops::Neg,
+};
 
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr, FromInto};
 use shakmaty::{san::SanPlus, uci::UciMove, Role};
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded};
 
-use crate::op1::Dtc;
+use crate::metric::{tightening_metric_sort_key, Dtc, Dtw};
 
 #[derive(Serialize, Debug, Clone)]
 pub struct TablebaseResponse {
@@ -27,6 +30,33 @@ pub struct MoveInfo {
     pub promotion: Option<Role>,
     #[serde(flatten)]
     pub pos: PositionInfo,
+}
+
+impl MoveInfo {
+    pub fn sort_key(&self) -> impl Ord {
+        (
+            PessimisticUnknown(self.pos.category),
+            (
+                Reverse(self.pos.checkmate),
+                Reverse(self.pos.variant_loss),
+                self.pos.variant_win,
+            ),
+            (
+                Reverse(self.pos.stalemate),
+                Reverse(self.pos.insufficient_material),
+            ),
+            tightening_metric_sort_key(self.pos.dtm.or(self.pos.dtw).map(i32::from)),
+            (
+                self.conversion ^ !self.pos.category.is_positive(),
+                tightening_metric_sort_key(self.pos.dtc.map(i32::from)),
+            ),
+            (
+                self.zeroing ^ !self.pos.category.is_positive(),
+                self.pos.maybe_rounded_dtz.map(Reverse),
+            ),
+            (Reverse(self.capture), Reverse(self.promotion)),
+        )
+    }
 }
 
 pub struct PartialMoveInfo {
@@ -66,8 +96,8 @@ pub struct PositionInfo {
     pub maybe_rounded_dtz: Option<Dtz>,
     #[serde_as(as = "Option<FromInto<i32>>")]
     pub precise_dtz: Option<Dtz>,
-    pub dtm: Option<i32>,
-    pub dtw: Option<i32>,
+    pub dtm: Option<Dtw>,
+    pub dtw: Option<Dtw>,
     pub dtc: Option<Dtc>,
     pub category: Category,
 }
@@ -80,8 +110,8 @@ pub struct PartialPositionInfo {
     pub insufficient_material: bool,
     pub halfmoves: u32,
     pub dtz: Option<MaybeRounded<Dtz>>,
-    pub dtm: Option<i32>,
-    pub dtw: Option<i32>,
+    pub dtm: Option<Dtw>,
+    pub dtw: Option<Dtw>,
 }
 
 impl PartialPositionInfo {
@@ -172,33 +202,11 @@ pub enum Category {
 }
 
 impl Category {
-    pub fn is_negative(&self) -> bool {
-        matches!(
-            self,
-            Category::SyzygyLoss | Category::MaybeLoss | Category::BlessedLoss | Category::Loss
-        )
-    }
-
     pub fn is_positive(&self) -> bool {
         matches!(
             self,
             Category::CursedWin | Category::MaybeWin | Category::SyzygyWin | Category::Win
         )
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct PessimisticUnknown(pub Category); // loss < unknown < maybe-loss < ...
-
-impl Ord for PessimisticUnknown {
-    fn cmp(&self, other: &PessimisticUnknown) -> Ordering {
-        (self.0 as u32).cmp(&(other.0 as u32))
-    }
-}
-
-impl PartialOrd for PessimisticUnknown {
-    fn partial_cmp(&self, other: &PessimisticUnknown) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 
@@ -218,6 +226,21 @@ impl Neg for Category {
             Category::SyzygyWin => Category::SyzygyLoss,
             Category::Win => Category::Loss,
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct PessimisticUnknown(pub Category); // loss < unknown < maybe-loss < ...
+
+impl Ord for PessimisticUnknown {
+    fn cmp(&self, other: &PessimisticUnknown) -> Ordering {
+        (self.0 as u32).cmp(&(other.0 as u32))
+    }
+}
+
+impl PartialOrd for PessimisticUnknown {
+    fn partial_cmp(&self, other: &PessimisticUnknown) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 

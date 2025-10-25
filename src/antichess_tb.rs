@@ -8,6 +8,8 @@ use arrayvec::ArrayVec;
 use shakmaty::{variant::VariantPosition, EnPassantMode, Position as _};
 use tracing::warn;
 
+use crate::metric::Dtw;
+
 pub unsafe fn init(directories: &[PathBuf]) {
     unsafe {
         assert_eq!(antichess_tb_init(), 0, "antichess_tb_init");
@@ -22,7 +24,7 @@ pub unsafe fn init(directories: &[PathBuf]) {
     }
 }
 
-pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<i32> {
+pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<Dtw> {
     let VariantPosition::Antichess(ref pos) = pos else {
         return None;
     };
@@ -60,13 +62,13 @@ pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<i32> {
         )
     };
 
-    match result {
-        0 => Some(dtw as i32),
-        1 => Some(dtw as i32), // cursed win/loss
-        2 => Some(0),          // draw
+    Some(Dtw(match result {
+        0 => dtw as i32,
+        1 => dtw as i32, // cursed win/loss
+        2 => 0,          // draw
         error => {
             warn!("antichess tb probe failed with error code {error}");
-            None
+            return None;
         }
-    }
+    }))
 }

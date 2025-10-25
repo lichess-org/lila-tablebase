@@ -1,38 +1,9 @@
 use std::{collections::HashMap, time::Duration};
 
-use crate::request::Op1Mode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use shakmaty::{fen::Fen, uci::UciMove, variant::VariantPosition, Chess, EnPassantMode, Position};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Dtc(pub i32);
-
-impl Dtc {
-    #[inline]
-    pub fn is_zero(self) -> bool {
-        self.0 == 0
-    }
-
-    #[inline]
-    pub fn is_negative(self) -> bool {
-        self.0 < 0
-    }
-
-    #[must_use]
-    pub fn add_moves_saturating(self, moves: u32) -> Dtc {
-        match self {
-            Dtc(0) => Dtc(0),
-            Dtc(n) if n > 0 => i32::try_from(moves)
-                .ok()
-                .and_then(|moves| n.checked_add(moves))
-                .map_or(Dtc(i32::MAX), Dtc),
-            Dtc(n) => i32::try_from(moves)
-                .ok()
-                .and_then(|moves| n.checked_sub(moves))
-                .map_or(Dtc(i32::MIN), Dtc),
-        }
-    }
-}
+use crate::{metric::Dtc, request::Op1Mode};
 
 #[derive(Deserialize, Debug, Default)]
 pub struct Op1Response {

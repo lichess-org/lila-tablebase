@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, sync::Arc};
+use std::sync::Arc;
 
 use arrayvec::ArrayVec;
 use shakmaty::{
@@ -16,11 +16,11 @@ use crate::{
     antichess_tb,
     errors::TablebaseError,
     gaviota,
-    op1::{Dtc, Op1Client, Op1Response},
+    op1::{Op1Client, Op1Response},
     request::Op1Mode,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PartialMoveInfo, PartialPositionInfo,
-        PessimisticUnknown, TablebaseResponse,
+        TablebaseResponse,
     },
 };
 
@@ -156,47 +156,7 @@ impl Tablebases {
             move_info.push(partial.with_dtc(dtc, pos.halfmoves()));
         }
 
-        move_info.sort_unstable_by_key(|m: &MoveInfo| {
-            (
-                PessimisticUnknown(m.pos.category),
-                (
-                    Reverse(m.pos.checkmate),
-                    Reverse(m.pos.variant_loss),
-                    m.pos.variant_win,
-                ),
-                (
-                    Reverse(m.pos.stalemate),
-                    Reverse(m.pos.insufficient_material),
-                ),
-                if m.pos.category.is_negative() {
-                    (
-                        Reverse(m.pos.dtm.or(m.pos.dtw)),
-                        Reverse(if m.conversion {
-                            Some(Dtc(0))
-                        } else {
-                            m.pos.dtc
-                        }),
-                    )
-                } else {
-                    (Reverse(None), Reverse(None))
-                },
-                if m.pos.category.is_positive() {
-                    (
-                        m.pos.dtm.or(m.pos.dtw).map(Reverse),
-                        if m.conversion {
-                            Some(Reverse(Dtc(0)))
-                        } else {
-                            m.pos.dtc.map(Reverse)
-                        },
-                    )
-                } else {
-                    (None, None)
-                },
-                m.zeroing ^ !m.pos.category.is_positive(),
-                m.pos.maybe_rounded_dtz.map(Reverse),
-                (Reverse(m.capture), Reverse(m.promotion)),
-            )
-        });
+        move_info.sort_unstable_by_key(MoveInfo::sort_key);
 
         let mut pos_info = pos_info_handle
             .await

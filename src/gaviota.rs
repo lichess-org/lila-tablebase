@@ -8,6 +8,8 @@ use arrayvec::ArrayVec;
 use shakmaty::{variant::VariantPosition, EnPassantMode, Position as _};
 use tracing::warn;
 
+use crate::metric::Dtw;
+
 pub unsafe fn init(directories: &[PathBuf]) {
     unsafe {
         assert_ne!(
@@ -38,7 +40,7 @@ pub unsafe fn init(directories: &[PathBuf]) {
     }
 }
 
-pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
+pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<Dtw> {
     let VariantPosition::Chess(ref pos) = pos else {
         return None;
     };
@@ -88,18 +90,14 @@ pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<i32> {
 
     let plies = plies as i32;
 
-    match gaviota_sys::TB_return_values(info) {
-        gaviota_sys::TB_return_values::tb_DRAW if result != 0 => Some(0),
-        gaviota_sys::TB_return_values::tb_WMATE if result != 0 => {
-            Some(pos.turn().fold_wb(plies, -plies))
-        }
-        gaviota_sys::TB_return_values::tb_BMATE if result != 0 => {
-            Some(pos.turn().fold_wb(-plies, plies))
-        }
-        gaviota_sys::TB_return_values::tb_FORBID => None,
+    Some(Dtw(match gaviota_sys::TB_return_values(info) {
+        gaviota_sys::TB_return_values::tb_DRAW if result != 0 => 0,
+        gaviota_sys::TB_return_values::tb_WMATE if result != 0 => pos.turn().fold_wb(plies, -plies),
+        gaviota_sys::TB_return_values::tb_BMATE if result != 0 => pos.turn().fold_wb(-plies, plies),
+        gaviota_sys::TB_return_values::tb_FORBID => return None,
         _ => {
             warn!("gaviota probe failed with result {result} and info {info}");
-            None
+            return None;
         }
-    }
+    }))
 }

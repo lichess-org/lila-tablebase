@@ -5,6 +5,7 @@ mod errors;
 mod antichess_tb;
 mod filesystem;
 mod gaviota;
+mod metric;
 mod op1;
 mod request;
 mod response;
