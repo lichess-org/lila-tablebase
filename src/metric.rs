@@ -51,7 +51,7 @@ impl From<Dtw> for i32 {
 
 pub fn tightening_metric_sort_key(metric: Option<i32>) -> impl Ord {
     (
-        Reverse(metric.filter(|m| *m <= 0)),
+        Reverse(metric.filter(|m| *m < 0)),
         metric.filter(|m| *m > 0).map(Reverse),
     )
 }
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn test_tightening_metric_sort_key() {
-        assert!(&[Some(-1), Some(-2), None, Some(2), Some(1)]
+        assert!(&[Some(-1), Some(-2), None, Some(0), Some(2), Some(1)]
             .is_sorted_by_key(|m| tightening_metric_sort_key(*m)));
     }
 }
