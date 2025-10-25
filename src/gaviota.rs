@@ -91,12 +91,19 @@ pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<Dtw> {
     let plies = plies as i32;
 
     Some(Dtw(match gaviota_sys::TB_return_values(info) {
-        gaviota_sys::TB_return_values::tb_DRAW if result != 0 => 0,
-        gaviota_sys::TB_return_values::tb_WMATE if result != 0 => pos.turn().fold_wb(plies, -plies),
-        gaviota_sys::TB_return_values::tb_BMATE if result != 0 => pos.turn().fold_wb(-plies, plies),
         gaviota_sys::TB_return_values::tb_FORBID => return None,
-        _ => {
+        _ if result != 0 => {
             warn!("gaviota probe failed with result {result} and info {info}");
+            return None;
+        }
+        gaviota_sys::TB_return_values::tb_DRAW => 0,
+        gaviota_sys::TB_return_values::tb_WMATE if plies != 0 => pos.turn().fold_wb(plies, -plies),
+        gaviota_sys::TB_return_values::tb_BMATE if plies != 0 => pos.turn().fold_wb(-plies, plies),
+        gaviota_sys::TB_return_values::tb_WMATE | gaviota_sys::TB_return_values::tb_BMATE => {
+            return None; // Dtw(0) reserved for draw
+        }
+        _ => {
+            warn!("unknown gaviota info {info}");
             return None;
         }
     }))
