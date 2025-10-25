@@ -126,7 +126,7 @@ async fn handle_probe(
         .try_get_with((variant, query.clone()), async move {
             app.cache_miss.fetch_add(1, atomic::Ordering::Relaxed);
             app.tbs
-                .probe(variant.position(query.fen)?, query.op1)
+                .probe(variant.position(query.fen)?, query.dtc)
                 .await
                 .inspect(|_| trace!("success"))
                 .inspect_err(|error| dyn_event!(error.tracing_level(), %error, "fail"))
