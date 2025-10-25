@@ -3,6 +3,7 @@ WORKDIR /lila-tablebase
 RUN apt-get update && apt-get upgrade --yes && apt-get install --yes libclang-dev libssl-dev gcc g++ make pkg-config
 COPY Cargo.toml Cargo.lock ./
 COPY src src
+RUN cargo test
 RUN cargo build --release
 
 FROM docker.io/debian:bookworm-slim
