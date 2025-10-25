@@ -40,7 +40,8 @@ impl Op1Client {
         Op1Client {
             endpoint: endpoint.to_owned(),
             client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
+                .user_agent("lila-tablebase")
+                .timeout(Duration::from_secs(10))
                 .build()
                 .expect("op1 client"),
         }
