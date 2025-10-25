@@ -51,5 +51,5 @@ pub enum Op1Mode {
 pub struct TablebaseQuery {
     pub fen: Fen,
     #[serde(default)]
-    pub op1: Op1Mode,
+    pub dtc: Op1Mode,
 }
