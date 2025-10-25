@@ -92,7 +92,7 @@ pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<Dtw> {
 
     Some(Dtw(match gaviota_sys::TB_return_values(info) {
         gaviota_sys::TB_return_values::tb_FORBID => return None,
-        _ if result != 0 => {
+        _ if result == 0 => {
             warn!("gaviota probe failed with result {result} and info {info}");
             return None;
         }
