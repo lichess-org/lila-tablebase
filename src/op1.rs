@@ -1,7 +1,9 @@
 use std::{collections::HashMap, time::Duration};
 
 use serde::Deserialize;
-use shakmaty::{fen::Fen, uci::UciMove, variant::VariantPosition, Chess, EnPassantMode, Position};
+use shakmaty::{
+    fen::Fen, uci::UciMove, variant::VariantPosition, Board, Chess, Color, EnPassantMode, Position,
+};
 
 use crate::{metric::Dtc, request::Op1Mode};
 
@@ -17,19 +19,34 @@ pub struct Op1Client {
     client: reqwest::Client,
 }
 
-fn is_supported_op1(pos: &Chess, op1_mode: Op1Mode) -> bool {
+fn is_op1(board: &Board) -> bool {
+    let white_pawns = board.white() & board.pawns();
+    let white_pawn_paths = white_pawns.shift(8)
+        | white_pawns.shift(16)
+        | white_pawns.shift(24)
+        | white_pawns.shift(32)
+        | white_pawns.shift(40);
+    (white_pawn_paths & board.black() & board.pawns()).any()
+}
+
+fn more_than_lone_pawn(board: &Board, color: Color) -> bool {
+    board.by_piece(color.pawn()).more_than_one()
+        || board
+            .by_color(color)
+            .without(board.kings())
+            .without(board.pawns())
+            .any()
+}
+
+fn use_op1(pos: &Chess, op1_mode: Op1Mode) -> bool {
     if op1_mode == Op1Mode::Never || pos.castles().any() {
         false
     } else if pos.board().occupied().count() < 8 {
         op1_mode == Op1Mode::Always
     } else if pos.board().occupied().count() == 8 {
-        let white_pawns = pos.board().white() & pos.board().pawns();
-        let white_pawn_paths = white_pawns.shift(8)
-            | white_pawns.shift(16)
-            | white_pawns.shift(24)
-            | white_pawns.shift(32)
-            | white_pawns.shift(40);
-        (white_pawn_paths & pos.board().black() & pos.board().pawns()).any()
+        is_op1(pos.board())
+            && more_than_lone_pawn(pos.board(), Color::White)
+            && more_than_lone_pawn(pos.board(), Color::Black)
     } else {
         false
     }
@@ -66,11 +83,11 @@ impl Op1Client {
             return Ok(Op1Response::default());
         }
 
-        if !is_supported_op1(pos, op1_mode)
+        if !use_op1(pos, op1_mode)
             && pos.legal_moves().into_iter().all(|m| {
                 let mut after = pos.clone();
                 after.play_unchecked(m);
-                !is_supported_op1(&after, op1_mode)
+                !use_op1(&after, op1_mode)
             })
         {
             return Ok(Op1Response::default());
@@ -87,5 +104,63 @@ impl Op1Client {
             .error_for_status()?
             .json()
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use shakmaty::CastlingMode;
+
+    use super::*;
+
+    #[test]
+    fn test_use_op1() {
+        for (fen, mode, expectation) in [
+            // 8-piece op1 position
+            (
+                "R7/8/8/8/7q/2K1B2p/7P/2Bk4 w - - 0 1",
+                Op1Mode::Always,
+                true,
+            ),
+            (
+                "R7/8/8/8/7q/2K1B2p/7P/2Bk4 w - - 0 1",
+                Op1Mode::Auxiliary,
+                true,
+            ),
+            (
+                "R7/8/8/8/7q/2K1B2p/7P/2Bk4 w - - 0 1",
+                Op1Mode::Never,
+                false,
+            ),
+            // 7-piece arbitrary position
+            (
+                "QN4n1/6r1/3k4/8/b2K4/8/8/8 b - - 0 1",
+                Op1Mode::Always,
+                true,
+            ),
+            (
+                "QN4n1/6r1/3k4/8/b2K4/8/8/8 b - - 0 1",
+                Op1Mode::Auxiliary,
+                false,
+            ),
+            // 8-piece positions with weak side
+            (
+                "4k3/4p3/8/8/8/8/3PPPPP/4K3 w - - 0 1",
+                Op1Mode::Always,
+                false,
+            ),
+            (
+                "4k3/4p3/8/8/8/8/3PPPPP/4K3 w - - 0 1",
+                Op1Mode::Auxiliary,
+                false,
+            ),
+        ] {
+            let pos = fen
+                .parse::<Fen>()
+                .expect("valid fen")
+                .into_position::<Chess>(CastlingMode::Chess960)
+                .expect("legal fen");
+            assert_eq!(use_op1(&pos, mode), expectation, "fen: {}", fen);
+        }
     }
 }
