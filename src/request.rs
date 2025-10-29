@@ -41,8 +41,8 @@ impl TablebaseVariant {
 #[derive(Deserialize, Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Op1Mode {
-    #[default]
     Never,
+    #[default]
     Auxiliary,
     Always,
 }
