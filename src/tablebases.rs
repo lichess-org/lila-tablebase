@@ -16,7 +16,7 @@ use crate::{
     antichess_tb,
     errors::TablebaseError,
     gaviota,
-    op1::{Op1Client, Op1Response},
+    op1::{zeroing_is_conversion, Op1Client, Op1Response},
     request::Op1Mode,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PartialMoveInfo, PartialPositionInfo,
@@ -96,6 +96,7 @@ impl Tablebases {
             dtz,
             dtm: unsafe { gaviota::probe_dtm(pos) },
             dtw: unsafe { antichess_tb::probe_dtw(pos) },
+            zeroing_is_conversion: zeroing_is_conversion(pos.board()),
         })
     }
 

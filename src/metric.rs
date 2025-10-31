@@ -1,6 +1,7 @@
 use std::cmp::Reverse;
 
 use serde::{Deserialize, Serialize};
+use shakmaty_syzygy::Dtz;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Dtc(pub i32);
@@ -16,19 +17,8 @@ impl Dtc {
         self.0 < 0
     }
 
-    #[must_use]
-    pub fn add_moves_saturating(self, moves: u32) -> Dtc {
-        match self {
-            Dtc(0) => Dtc(0),
-            Dtc(n) if n > 0 => i32::try_from(moves)
-                .ok()
-                .and_then(|moves| n.checked_add(moves))
-                .map_or(Dtc(i32::MAX), Dtc),
-            Dtc(n) => i32::try_from(moves)
-                .ok()
-                .and_then(|moves| n.checked_sub(moves))
-                .map_or(Dtc(i32::MIN), Dtc),
-        }
+    pub fn assume_zeroing_is_conversion(self) -> Dtz {
+        Dtz(self.0.saturating_mul(2))
     }
 }
 

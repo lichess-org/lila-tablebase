@@ -3,6 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use serde::Deserialize;
 use shakmaty::{
     fen::Fen, uci::UciMove, variant::VariantPosition, Board, Chess, Color, EnPassantMode, Position,
+    Rank,
 };
 
 use crate::{metric::Dtc, request::Op1Mode};
@@ -50,6 +51,16 @@ fn use_op1(pos: &Chess, op1_mode: Op1Mode) -> bool {
     } else {
         false
     }
+}
+
+pub fn zeroing_is_conversion(board: &Board) -> bool {
+    // All pawns are blocked or about to promote, so that each zeroing
+    // move is also a conversion (DTC and DTZ coincide).
+    Color::ALL.into_iter().all(|color| {
+        (board.by_color(color) & board.pawns())
+            .shift(color.fold_wb(8, -8))
+            .is_subset(board.pawns() | color.relative_rank(Rank::Eighth))
+    })
 }
 
 impl Op1Client {
@@ -161,6 +172,21 @@ mod tests {
                 .into_position::<Chess>(CastlingMode::Chess960)
                 .expect("legal fen");
             assert_eq!(use_op1(&pos, mode), expectation, "fen: {}", fen);
+        }
+    }
+
+    #[test]
+    fn test_zeroing_is_conversion() {
+        for (fen, expectation) in [
+            ("4k3/8/p7/P7/8/8/8/4K3", true),
+            ("4k3/8/p7/P7/P7/P7/8/4K3", true),
+            ("4k3/8/p7/P7/8/P7/8/4K3 w - - 0 1", false),
+            ("4k3/p5PP/Pp6/1P2p3/3pPp2/3PPP2/pn2P2p/4K3", true),
+            ("4k3/p5PP/Pp6/1P2p3/3pPp2/3PPP1p/pn2P3/4K3", false),
+            ("4k3/p5PP/Pp6/1P6/3pPp2/3PPP1p/pn2P2P/4K3", false),
+        ] {
+            let board = fen.parse::<Fen>().expect("valid fen").into_setup().board;
+            assert_eq!(zeroing_is_conversion(&board), expectation, "fen: {}", fen);
         }
     }
 }

@@ -112,6 +112,7 @@ pub struct PartialPositionInfo {
     pub dtz: Option<MaybeRounded<Dtz>>,
     pub dtm: Option<Dtw>,
     pub dtw: Option<Dtw>,
+    pub zeroing_is_conversion: bool,
 }
 
 impl PartialPositionInfo {
@@ -156,12 +157,29 @@ impl PartialPositionInfo {
                     }
                 } else if let Some(dtc) = dtc {
                     if halfmoves_before < 100 {
-                        match dtc.add_moves_saturating(self.halfmoves / 2) {
-                            Dtc(n) if n <= -50 => Category::MaybeLoss,
-                            Dtc(n) if n < 0 => Category::Loss,
-                            Dtc(0) => Category::Draw,
-                            Dtc(n) if n < 50 => Category::Win,
-                            Dtc(_) => Category::MaybeWin,
+                        match dtc
+                            .assume_zeroing_is_conversion()
+                            .add_plies_saturating(self.halfmoves)
+                        {
+                            Dtz(n) if n < -100 => {
+                                if self.zeroing_is_conversion {
+                                    Category::BlessedLoss
+                                } else {
+                                    Category::MaybeLoss
+                                }
+                            }
+                            Dtz(-100) => Category::MaybeLoss,
+                            Dtz(n) if n < 0 => Category::Loss,
+                            Dtz(0) => Category::Draw,
+                            Dtz(n) if n < 100 => Category::Win,
+                            Dtz(100) => Category::MaybeWin,
+                            Dtz(_) => {
+                                if self.zeroing_is_conversion {
+                                    Category::CursedWin
+                                } else {
+                                    Category::MaybeWin
+                                }
+                            }
                         }
                     } else if dtc.is_negative() {
                         Category::BlessedLoss
