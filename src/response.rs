@@ -169,9 +169,9 @@ impl PartialPositionInfo {
                                 }
                             }
                             Dtz(-100) => Category::MaybeLoss,
-                            Dtz(n) if n < 0 => Category::Loss,
+                            Dtz(n) if n < 0 => Category::MaybeLoss, // Unknown due to later phase
                             Dtz(0) => Category::Draw,
-                            Dtz(n) if n < 100 => Category::Win,
+                            Dtz(n) if n < 100 => Category::MaybeWin, // Unknown due to later phase
                             Dtz(100) => Category::MaybeWin,
                             Dtz(_) => {
                                 if self.zeroing_is_conversion {
