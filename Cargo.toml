@@ -29,7 +29,7 @@ tracing = "0.1"
 antichess-tb-sys = "0.1"
 tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"] }
 tower = "0.5"
-reqwest = { version = "0.13", features = ["json"] }
+reqwest = { version = "0.13", features = ["json", "query"] }
 
 [profile.release]
 lto = true
