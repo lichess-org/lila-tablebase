@@ -5,7 +5,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use shakmaty::{variant::VariantPosition, EnPassantMode, Position as _};
+use shakmaty::{EnPassantMode, Position as _, variant::VariantPosition};
 use tracing::warn;
 
 use crate::metric::Dtw;
@@ -41,7 +41,7 @@ pub unsafe fn init(directories: &[PathBuf]) {
 }
 
 pub unsafe fn probe_dtm(pos: &VariantPosition) -> Option<Dtw> {
-    let VariantPosition::Chess(ref pos) = pos else {
+    let VariantPosition::Chess(pos) = pos else {
         return None;
     };
 

@@ -4,11 +4,11 @@ use std::{
 };
 
 use serde::Serialize;
-use serde_with::{serde_as, DisplayFromStr, FromInto};
-use shakmaty::{san::SanPlus, uci::UciMove, Role};
+use serde_with::{DisplayFromStr, FromInto, serde_as};
+use shakmaty::{Role, san::SanPlus, uci::UciMove};
 use shakmaty_syzygy::{AmbiguousWdl, Dtz, MaybeRounded};
 
-use crate::metric::{tightening_metric_sort_key, Dtc, Dtw};
+use crate::metric::{Dtc, Dtw, tightening_metric_sort_key};
 
 #[derive(Serialize, Debug, Clone)]
 pub struct TablebaseResponse {
@@ -33,7 +33,7 @@ pub struct MoveInfo {
 }
 
 impl MoveInfo {
-    pub fn sort_key(&self) -> impl Ord {
+    pub fn sort_key(&self) -> impl Ord + use<> {
         (
             PessimisticUnknown(self.pos.category),
             (

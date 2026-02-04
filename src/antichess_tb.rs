@@ -5,7 +5,7 @@ use std::{
 
 use antichess_tb_sys::{antichess_tb_add_path, antichess_tb_init, antichess_tb_probe_dtw};
 use arrayvec::ArrayVec;
-use shakmaty::{variant::VariantPosition, EnPassantMode, Position as _};
+use shakmaty::{EnPassantMode, Position as _, variant::VariantPosition};
 use tracing::warn;
 
 use crate::metric::Dtw;
@@ -25,7 +25,7 @@ pub unsafe fn init(directories: &[PathBuf]) {
 }
 
 pub unsafe fn probe_dtw(pos: &VariantPosition) -> Option<Dtw> {
-    let VariantPosition::Antichess(ref pos) = pos else {
+    let VariantPosition::Antichess(pos) = pos else {
         return None;
     };
 

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use shakmaty::{
+    CastlingMode, PositionError,
     fen::Fen,
     variant::{Variant, VariantPosition},
-    CastlingMode, PositionError,
 };
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq, Hash)]

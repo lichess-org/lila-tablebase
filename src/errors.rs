@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use shakmaty::{fen::ParseFenError, variant::VariantPosition, PositionError};
+use shakmaty::{PositionError, fen::ParseFenError, variant::VariantPosition};
 use shakmaty_syzygy::SyzygyError;
 
 macro_rules! dyn_event {

@@ -2,8 +2,8 @@ use std::{collections::HashMap, time::Duration};
 
 use serde::Deserialize;
 use shakmaty::{
-    fen::Fen, uci::UciMove, variant::VariantPosition, Board, Chess, Color, EnPassantMode, Position,
-    Rank,
+    Board, Chess, Color, EnPassantMode, Position, Rank, fen::Fen, uci::UciMove,
+    variant::VariantPosition,
 };
 
 use crate::{metric::Dtc, request::Op1Mode};
@@ -80,7 +80,7 @@ impl Op1Client {
         pos: &VariantPosition,
         op1_mode: Op1Mode,
     ) -> Result<Op1Response, reqwest::Error> {
-        let VariantPosition::Chess(ref pos) = pos else {
+        let VariantPosition::Chess(pos) = pos else {
             return Ok(Op1Response::default());
         };
 

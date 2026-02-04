@@ -14,17 +14,17 @@ mod tablebases;
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    sync::{atomic, atomic::AtomicU64, Arc},
+    sync::{Arc, atomic, atomic::AtomicU64},
     time::Duration,
 };
 
 use axum::{
+    Router,
     extract::{Path, Query, State},
     routing::get,
-    Router,
 };
 use axum_content_negotiation::{Negotiate, NegotiateLayer};
-use clap::{builder::PathBufValueParser, ArgAction, CommandFactory as _, Parser};
+use clap::{ArgAction, CommandFactory as _, Parser, builder::PathBufValueParser};
 use listenfd::ListenFd;
 use moka::future::Cache;
 use op1::Op1Client;
@@ -33,7 +33,7 @@ use tikv_jemallocator::Jemalloc;
 use tokio::net::{TcpListener, UnixListener};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
-use tracing::{info, info_span, trace, Instrument as _};
+use tracing::{Instrument as _, info, info_span, trace};
 
 use crate::{
     errors::TablebaseError,

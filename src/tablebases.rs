@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use arrayvec::ArrayVec;
 use shakmaty::{
+    KnownOutcome, Move, Outcome, Position as _,
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
-    KnownOutcome, Move, Outcome, Position as _,
 };
 use shakmaty_syzygy::{
-    filesystem::Filesystem, Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase,
+    Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase, filesystem::Filesystem,
 };
 use tokio::{sync::Semaphore, task};
 use tracing::info;
@@ -16,7 +16,7 @@ use crate::{
     antichess_tb,
     errors::TablebaseError,
     gaviota,
-    op1::{zeroing_is_conversion, Op1Client, Op1Response},
+    op1::{Op1Client, Op1Response, zeroing_is_conversion},
     request::Op1Mode,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PartialMoveInfo, PartialPositionInfo,

@@ -52,7 +52,9 @@ mod tests {
 
     #[test]
     fn test_tightening_metric_sort_key() {
-        assert!(&[Some(-1), Some(-2), None, Some(0), Some(2), Some(1)]
-            .is_sorted_by_key(|m| tightening_metric_sort_key(*m)));
+        assert!(
+            &[Some(-1), Some(-2), None, Some(0), Some(2), Some(1)]
+                .is_sorted_by_key(|m| tightening_metric_sort_key(*m))
+        );
     }
 }
