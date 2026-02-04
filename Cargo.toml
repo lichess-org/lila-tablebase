@@ -4,7 +4,6 @@ publish = false
 description = "A Syzygy tablebase server"
 homepage = "https://tablebase.lichess.ovh"
 repository = "https://github.com/lichess-org/lila-tablebase"
-readme = "README.md"
 license = "AGPL-3.0+"
 categories = ["games"]
 keywords = ["chess", "syzygy", "tablebase"]
@@ -18,7 +17,6 @@ serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 shakmaty = { version = "0.30", features = ["serde"] }
 shakmaty-syzygy = { version = "0.28", features = ["variant", "mmap"] }
-gaviota-sys = "0.1"
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
@@ -26,10 +24,11 @@ listenfd = "1"
 tower-http = { version = "0.6", features = ["trace"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
-antichess-tb-sys = "0.1"
+antichess-tb-sys = "0.2"
 tikv-jemallocator = { version = "0.6", features = ["unprefixed_malloc_on_supported_platforms"] }
 tower = "0.5"
 reqwest = { version = "0.13", features = ["json", "query"] }
+prophet-sys = "0.1"
 
 [profile.release]
 lto = true
