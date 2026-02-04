@@ -17,6 +17,7 @@ use crate::{
     errors::TablebaseError,
     gaviota,
     op1::{Op1Client, Op1Response, zeroing_is_conversion},
+    prophet,
     request::Op1Mode,
     response::{
         Category, MainlineResponse, MainlineStep, MoveInfo, PartialMoveInfo, PartialPositionInfo,
@@ -94,7 +95,7 @@ impl Tablebases {
             insufficient_material: pos.is_insufficient_material(),
             halfmoves: pos.halfmoves(),
             dtz,
-            dtm: unsafe { gaviota::probe_dtm(pos) },
+            dtm: unsafe { prophet::probe_dtm(pos).or_else(|| gaviota::probe_dtm(pos)) },
             dtw: unsafe { antichess_tb::probe_dtw(pos) },
             zeroing_is_conversion: zeroing_is_conversion(pos.board()),
         })
