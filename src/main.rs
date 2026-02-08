@@ -1,5 +1,3 @@
-#![forbid(unsafe_op_in_unsafe_fn)]
-
 #[macro_use]
 mod errors;
 mod antichess_tb;
@@ -7,6 +5,7 @@ mod filesystem;
 mod gaviota;
 mod metric;
 mod op1;
+mod prophet;
 mod request;
 mod response;
 mod tablebases;
@@ -63,6 +62,9 @@ struct Opt {
     /// Directory with Gaviota tablebase files.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     gaviota: Vec<PathBuf>,
+    /// Directory with Prophet tablebase files.
+    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
+    prophet: Vec<PathBuf>,
     // Op1 server.
     #[arg(long)]
     op1_endpoint: Option<String>,
@@ -176,6 +178,7 @@ async fn main() {
         && opt.atomic.is_empty()
         && opt.antichess.is_empty()
         && opt.gaviota.is_empty()
+        && opt.prophet.is_empty()
         && opt.op1_endpoint.is_none()
     {
         Opt::command().print_help().expect("usage");
@@ -195,6 +198,11 @@ async fn main() {
             // Initialize Gaviota tablebase.
             unsafe {
                 gaviota::init(&opt.gaviota);
+            }
+
+            // Initialize Prophet tablebase.
+            unsafe {
+                prophet::init(&opt.prophet);
             }
 
             // Initialize Antichess tablebase.
