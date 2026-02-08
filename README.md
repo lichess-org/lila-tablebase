@@ -7,6 +7,7 @@ based on [shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy).
 Blog posts
 ----------
 
+- [Op1 - Partial 8-piece tablebase available](https://lichess.org/@/Lichess/blog/op1-partial-8-piece-tablebase-available/1ptPBDpC)
 - [Optimizing the tablebase server](https://lichess.org/@/revoof/blog/optimizing-the-tablebase-server/MetV0ZQd)
 - [7 piece tablebases are complete](https://lichess.org/@/lichess/blog/7-piece-syzygy-tablebases-are-complete/W3WeMyQA)
 
