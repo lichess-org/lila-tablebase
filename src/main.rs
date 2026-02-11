@@ -58,9 +58,6 @@ struct Opt {
     /// Directory with DTW tablebase files for antichess.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     antichess_tb: Vec<PathBuf>,
-    /// Directory with Gaviota tablebase files.
-    #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
-    gaviota: Vec<PathBuf>,
     /// Directory with Prophet tablebase files.
     #[arg(long, action = ArgAction::Append, value_parser = PathBufValueParser::new())]
     prophet: Vec<PathBuf>,
@@ -176,7 +173,6 @@ async fn main() {
     if opt.standard.is_empty()
         && opt.atomic.is_empty()
         && opt.antichess.is_empty()
-        && opt.gaviota.is_empty()
         && opt.prophet.is_empty()
         && opt.op1_endpoint.is_none()
     {

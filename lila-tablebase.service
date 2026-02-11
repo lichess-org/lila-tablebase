@@ -18,7 +18,8 @@ ExecStart=/usr/local/bin/lila-tablebase \
   --standard /home/tables/standard/7/5v2_pawnless \
   --standard /home/tables/standard/7/6v1_pawnful \
   --standard /home/tables/standard/7/6v1_pawnless \
-  --gaviota /home/hot-tables/standard/Gaviota \
+  --prophet /home/tables/standard/prophet \
+  --prophet /home/hot-tables/standard/prophet \
   --atomic /home/tables/atomic/3-4-5 \
   --atomic /home/tables/atomic/6-wdl \
   --atomic /home/tables/atomic/6-dtz \
