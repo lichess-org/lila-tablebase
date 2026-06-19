@@ -87,6 +87,16 @@ struct Opt {
     #[arg(long, default_value = "4")]
     backends: usize,
 
+    /// Enable io_uring submission queue polling, with this idle timeout in
+    /// milliseconds, on each backend ring.
+    ///
+    /// Dedicates a busy-polling kernel thread per backend to avoid submission
+    /// syscalls under high load. Costs CPU when idle and may require elevated
+    /// privileges, so it is off by default. When set, `IORING_SETUP_SQPOLL`
+    /// and `dontfork()` are applied.
+    #[arg(long)]
+    sqpoll_idle_ms: Option<u32>,
+
     /// Maximum number of cached responses.
     #[arg(long, default_value = "20000")]
     cache: u64,
@@ -138,8 +148,14 @@ enum TablebaseRequest {
 fn spawn_backend(opt: Opt) -> mpsc::Sender<TablebaseRequest> {
     let (tx, mut rx) = mpsc::channel(256);
     thread::spawn(move || {
+        let mut uring_builder = tokio_uring::uring_builder();
+        if let Some(idle) = opt.sqpoll_idle_ms {
+            // Busy-poll the submission queue instead of issuing a syscall per
+            // batch. dontfork() keeps the ring's mmap out of forked children.
+            uring_builder.setup_sqpoll(idle).dontfork();
+        }
         tokio_uring::builder()
-            .uring_builder(tokio_uring::uring_builder().setup_sqpoll(500))
+            .uring_builder(&uring_builder)
             .entries(1024)
             .start(async move {
                 // Prepare the custom Syzygy filesystem (io_uring + hot prefix).
