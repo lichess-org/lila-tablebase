@@ -15,8 +15,9 @@ axum-content-negotiation = "0.1"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
-shakmaty = { version = "0.30", features = ["serde"] }
-shakmaty-syzygy = { version = "0.28", features = ["variant", "mmap"] }
+# PoC: use the locally ported async shakmaty-syzygy and its matching shakmaty.
+shakmaty = { path = "../shakmaty/shakmaty", features = ["serde"] }
+shakmaty-syzygy = { path = "../shakmaty/shakmaty-syzygy", features = ["variant"] }
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
@@ -29,6 +30,10 @@ tikv-jemallocator = { version = "0.7", features = ["unprefixed_malloc_on_support
 tower = "0.5"
 reqwest = { version = "0.13", features = ["json", "query"] }
 prophet-sys = "0.1"
+# PoC: true async positioned reads via io_uring.
+tokio-uring = "0.5.0"
+futures-util = "0.3.31"
+libc = "0.2"
 
 [profile.release]
 lto = true

@@ -1,20 +1,18 @@
-use std::sync::Arc;
-
 use arrayvec::ArrayVec;
+use futures_util::{StreamExt as _, stream::FuturesUnordered};
 use shakmaty::{
     KnownOutcome, Move, Outcome, Position as _,
     san::SanPlus,
     variant::{Antichess, Atomic, Chess, VariantPosition},
 };
-use shakmaty_syzygy::{
-    Dtz, MaybeRounded, SyzygyError, Tablebase as SyzygyTablebase, filesystem::Filesystem,
-};
-use tokio::{sync::Semaphore, task};
+use shakmaty_syzygy::{Dtz, MaybeRounded, SyzygyError, aio::Tablebase as SyzygyTablebase};
+use tokio::{join, task};
 use tracing::info;
 
 use crate::{
     antichess_tb,
     errors::TablebaseError,
+    filesystem::{HotPrefixFilesystem, TokioUringFilesystem},
     op1::{Op1Client, Op1Response, zeroing_is_conversion},
     prophet,
     request::Op1Mode,
@@ -24,48 +22,65 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+/// The Syzygy filesystem backing each tablebase, bound to one `tokio-uring`
+/// runtime.
+type Fs = HotPrefixFilesystem<TokioUringFilesystem>;
+
 pub struct Tablebases {
-    pub standard: SyzygyTablebase<Chess>,
-    pub atomic: SyzygyTablebase<Atomic>,
-    pub antichess: SyzygyTablebase<Antichess>,
+    pub standard: SyzygyTablebase<Chess, Fs>,
+    pub atomic: SyzygyTablebase<Atomic, Fs>,
+    pub antichess: SyzygyTablebase<Antichess, Fs>,
     pub op1: Option<Op1Client>,
-    semaphore: Semaphore,
 }
 
 impl Tablebases {
-    pub fn with_filesystem(fs: Arc<dyn Filesystem>) -> Tablebases {
+    pub fn with_filesystem(fs: Fs) -> Tablebases {
         Tablebases {
-            standard: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
-            atomic: SyzygyTablebase::with_filesystem(Arc::clone(&fs)),
+            standard: SyzygyTablebase::with_filesystem(fs.clone()),
+            atomic: SyzygyTablebase::with_filesystem(fs.clone()),
             antichess: SyzygyTablebase::with_filesystem(fs),
             op1: None,
-            semaphore: Semaphore::new(256),
         }
     }
 
-    fn probe_dtz_blocking(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
+    async fn probe_dtz(&self, pos: &VariantPosition) -> Result<MaybeRounded<Dtz>, SyzygyError> {
         match *pos {
-            VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos),
+            VariantPosition::Chess(ref pos) => self.standard.probe_dtz(pos).await,
+            VariantPosition::Atomic(ref pos) => self.atomic.probe_dtz(pos).await,
+            VariantPosition::Antichess(ref pos) => self.antichess.probe_dtz(pos).await,
             _ => unimplemented!("variant not supported"),
         }
     }
 
-    fn best_move_blocking(
+    async fn best_move(
         &self,
         pos: &VariantPosition,
     ) -> Result<Option<(Move, MaybeRounded<Dtz>)>, SyzygyError> {
         match *pos {
-            VariantPosition::Chess(ref pos) => self.standard.best_move(pos),
-            VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos),
-            VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos),
+            VariantPosition::Chess(ref pos) => self.standard.best_move(pos).await,
+            VariantPosition::Atomic(ref pos) => self.atomic.best_move(pos).await,
+            VariantPosition::Antichess(ref pos) => self.antichess.best_move(pos).await,
             _ => unimplemented!("variant not supported"),
         }
     }
 
-    fn partial_position_info_blocking(
+    /// DTM from the (blocking, FFI) Prophet tables, off the uring thread.
+    async fn probe_dtm(pos: &VariantPosition) -> Option<crate::metric::Dtw> {
+        let pos = pos.clone();
+        task::spawn_blocking(move || unsafe { prophet::probe_dtm(&pos) })
+            .await
+            .expect("blocking probe_dtm")
+    }
+
+    /// DTW from the (blocking, FFI) antichess tables, off the uring thread.
+    async fn probe_dtw(pos: &VariantPosition) -> Option<crate::metric::Dtw> {
+        let pos = pos.clone();
+        task::spawn_blocking(move || unsafe { antichess_tb::probe_dtw(&pos) })
+            .await
+            .expect("blocking probe_dtw")
+    }
+
+    async fn partial_position_info(
         &self,
         pos: &VariantPosition,
     ) -> Result<PartialPositionInfo, SyzygyError> {
@@ -76,7 +91,14 @@ impl Tablebases {
             _ => (false, false),
         };
 
-        let dtz = match self.probe_dtz_blocking(pos) {
+        // Probe Syzygy (async, io_uring) and the FFI metrics concurrently.
+        let (dtz_result, dtm, dtw) = join!(
+            self.probe_dtz(pos),
+            Self::probe_dtm(pos),
+            Self::probe_dtw(pos),
+        );
+
+        let dtz = match dtz_result {
             Err(
                 SyzygyError::Castling
                 | SyzygyError::TooManyPieces
@@ -94,8 +116,8 @@ impl Tablebases {
             insufficient_material: pos.is_insufficient_material(),
             halfmoves: pos.halfmoves(),
             dtz,
-            dtm: unsafe { prophet::probe_dtm(pos) },
-            dtw: unsafe { antichess_tb::probe_dtw(pos) },
+            dtm,
+            dtw,
             zeroing_is_conversion: zeroing_is_conversion(pos.board()),
         })
     }
@@ -105,50 +127,52 @@ impl Tablebases {
         pos: VariantPosition,
         op1_mode: Op1Mode,
     ) -> Result<TablebaseResponse, TablebaseError> {
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .expect("semaphore not closed");
         info!("begin");
 
-        let move_info_handles = pos
+        // Probe every successor position concurrently.
+        let move_infos: FuturesUnordered<_> = pos
             .legal_moves()
             .into_iter()
             .map(|m| {
                 let uci = m.to_uci(pos.castles().mode());
-
                 let mut after = pos.clone();
                 let san = SanPlus::from_move_and_play_unchecked(&mut after, m);
-
-                task::spawn_blocking(move || {
-                    self.partial_position_info_blocking(&after)
-                        .map(|pos| PartialMoveInfo {
+                async move {
+                    self.partial_position_info(&after)
+                        .await
+                        .map(|info| PartialMoveInfo {
                             uci,
                             san,
                             capture: m.capture(),
                             promotion: m.promotion(),
                             zeroing: m.is_zeroing(),
                             conversion: m.is_conversion(),
-                            pos,
+                            pos: info,
                         })
-                })
+                }
             })
-            .collect::<ArrayVec<_, 256>>();
+            .collect();
 
-        let pos_info_handle = {
-            let pos = pos.clone();
-            task::spawn_blocking(move || self.partial_position_info_blocking(&pos))
+        let op1 = async {
+            match &self.op1 {
+                Some(op1_client) => op1_client.probe_dtc(&pos, op1_mode).await,
+                None => Ok(Op1Response::default()),
+            }
         };
 
-        let op1_response = match &self.op1 {
-            Some(op1_client) => op1_client.probe_dtc(&pos, op1_mode).await?,
-            None => Op1Response::default(),
-        };
+        // Run successor probes, the root probe and the upstream OP1 request all
+        // concurrently.
+        let (partials, pos_partial, op1_response) = join!(
+            move_infos.collect::<ArrayVec<_, 256>>(),
+            self.partial_position_info(&pos),
+            op1,
+        );
+        let pos_partial = pos_partial?;
+        let op1_response = op1_response?;
 
-        let mut move_info = Vec::with_capacity(move_info_handles.len());
-        for handle in move_info_handles {
-            let partial = handle.await.expect("move info")?;
+        let mut move_info = Vec::with_capacity(partials.len());
+        for partial in partials {
+            let partial = partial?;
             let dtc = op1_response
                 .children
                 .get(&partial.uci)
@@ -159,9 +183,7 @@ impl Tablebases {
 
         move_info.sort_unstable_by_key(MoveInfo::sort_key);
 
-        let mut pos_info = pos_info_handle
-            .await
-            .expect("pos info")?
+        let mut pos_info = pos_partial
             .with_dtc(op1_response.root, pos.halfmoves().saturating_sub(1));
 
         // Use category of previous position to infer syzygy-win / syzygy-loss,
@@ -199,13 +221,18 @@ impl Tablebases {
         })
     }
 
-    fn mainline_blocking(&self, mut pos: VariantPosition) -> Result<MainlineResponse, SyzygyError> {
-        let dtz = self.probe_dtz_blocking(&pos)?;
+    pub async fn mainline(
+        &'static self,
+        mut pos: VariantPosition,
+    ) -> Result<MainlineResponse, SyzygyError> {
+        info!("begin");
+
+        let dtz = self.probe_dtz(&pos).await?;
         let mut mainline = Vec::new();
 
         if !dtz.is_zero() {
             while pos.halfmoves() < 100 {
-                if let Some((m, dtz)) = self.best_move_blocking(&pos)? {
+                if let Some((m, dtz)) = self.best_move(&pos).await? {
                     mainline.push(MainlineStep {
                         uci: m.to_uci(pos.castles().mode()),
                         dtz: dtz.ignore_rounding(),
@@ -224,21 +251,5 @@ impl Tablebases {
             mainline,
             winner: pos.outcome().winner().map(|winner| winner.char()),
         })
-    }
-
-    pub async fn mainline(
-        &'static self,
-        pos: VariantPosition,
-    ) -> Result<MainlineResponse, SyzygyError> {
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .expect("semaphore not closed");
-        info!("begin");
-
-        task::spawn_blocking(move || self.mainline_blocking(pos))
-            .await
-            .expect("mainline blocking")
     }
 }
