@@ -15,8 +15,8 @@ axum-content-negotiation = "0.1"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
-shakmaty = { version = "0.30", path = "../shakmaty/shakmaty", features = ["serde"] }
-shakmaty-syzygy = { version = "0.28", path = "../shakmaty/shakmaty-syzygy", features = ["variant", "mmap"] }
+shakmaty = { version = "0.30", features = ["serde"] }
+shakmaty-syzygy = { version = "0.28", features = ["variant", "mmap"] }
 arrayvec = { version = "0.7", features = ["serde"] }
 serde_with = "3"
 moka = { version = "0.12", features = ["future"] }
